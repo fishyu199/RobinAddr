@@ -7,6 +7,7 @@ type LeaderboardRowProps = {
   children: ReactNode;
   href: string;
   label: string;
+  onOpenOverlay?: () => void;
 };
 
 function shouldUseCurrentTab() {
@@ -14,10 +15,14 @@ function shouldUseCurrentTab() {
     || window.matchMedia('(hover: none) and (pointer: coarse)').matches;
 }
 
-export default function LeaderboardRow({ children, href, label }: LeaderboardRowProps) {
+export default function LeaderboardRow({ children, href, label, onOpenOverlay }: LeaderboardRowProps) {
   const router = useRouter();
   const openDetail = () => {
     if (shouldUseCurrentTab()) {
+      if (onOpenOverlay) {
+        onOpenOverlay();
+        return;
+      }
       router.push(href);
       return;
     }

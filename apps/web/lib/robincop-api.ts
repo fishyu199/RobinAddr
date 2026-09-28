@@ -70,7 +70,7 @@ async function apiFetch<T>(path: string, fresh = false, init: RequestInit = {}):
       ...init,
       headers: { Accept: 'application/json', ...init.headers },
       signal: controller.signal,
-      ...(fresh ? { cache: 'no-store' as const } : { next: { revalidate: 300 } }),
+      ...(fresh ? { cache: 'no-store' as const } : { next: { revalidate: 30 } }),
     });
     if (!response.ok) return null;
     return await response.json() as T;
@@ -81,10 +81,9 @@ async function apiFetch<T>(path: string, fresh = false, init: RequestInit = {}):
   }
 }
 
-export async function getWallets(): Promise<WalletListResponse | null> {
+export async function getWallets(limit = 24): Promise<WalletListResponse | null> {
   const response = await apiFetch<WalletListResponse>(
-    '/api/v1/wallets?limit=200',
-    true,
+    `/api/v1/wallets?limit=${Math.max(1, Math.min(200, Math.round(limit)))}`,
   );
   if (response) {
     return {
@@ -98,7 +97,6 @@ export async function getWallets(): Promise<WalletListResponse | null> {
 export async function getWallet(address: string): Promise<WalletDetail | null> {
   const wallet = await apiFetch<WalletDetail>(
     `/api/v1/wallets/${encodeURIComponent(address)}?compact=true`,
-    true,
   );
   if (wallet) return { ...wallet, data_source: 'live' };
   return snapshots.find((item) => item.address.toLowerCase() === address.toLowerCase()) ?? null;

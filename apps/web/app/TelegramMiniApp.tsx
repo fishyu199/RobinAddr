@@ -87,6 +87,14 @@ export default function TelegramMiniApp() {
     let disposed = false;
     let attempts = 0;
     let cleanup = () => {};
+    const launchParams = new URLSearchParams(window.location.search);
+    const mayBeTelegram = Boolean(
+      window.Telegram?.WebApp
+      || launchParams.has('tgWebAppData')
+      || launchParams.has('tgWebAppVersion')
+      || launchParams.has('tgWebAppPlatform'),
+    );
+    if (!mayBeTelegram) return;
 
     const initialize = () => {
       const webApp = window.Telegram?.WebApp;
@@ -142,7 +150,15 @@ export default function TelegramMiniApp() {
       };
     };
 
-    initialize();
+    if (window.Telegram?.WebApp) {
+      initialize();
+    } else {
+      const script = document.createElement('script');
+      script.src = 'https://telegram.org/js/telegram-web-app.js?63';
+      script.async = true;
+      script.onload = initialize;
+      document.head.appendChild(script);
+    }
     return () => {
       disposed = true;
       cleanup();

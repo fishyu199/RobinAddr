@@ -20,8 +20,8 @@ export default function BackToDashboard() {
   };
 
   return (
-    <button type="button" className="back-link" onClick={handleBack} aria-label="Back to dashboard">
-      ← Back to dashboard
+    <button type="button" className="back-link" onClick={handleBack} aria-label="Back to wallet list">
+      ← Back to wallets
     </button>
   );
 }

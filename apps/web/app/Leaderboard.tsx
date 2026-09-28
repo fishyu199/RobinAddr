@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { WalletCategoryCounts, WalletListItem } from '../lib/robincop-api';
 import CopyAddressButton from './CopyAddressButton';
 import LeaderboardRow from './LeaderboardRow';
+import WalletDetailOverlay from './wallet/WalletDetailOverlay';
 
 export type WalletRow = {
   name: string; address: string; tags: string[]; score: number;
@@ -23,8 +24,8 @@ const categories: Array<{ key: Category; label: string }> = [
   { key: 'fresh', label: 'Fresh' },
   { key: 'sniper', label: 'Sniper' },
 ];
-const ROW_BATCH = 18;
-const API_PAGE_SIZE = 200;
+const ROW_BATCH = 24;
+const API_PAGE_SIZE = 24;
 const WALLET_ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 const publicApiUrl = (process.env.NEXT_PUBLIC_API_URL || '/robincop-api').replace(/\/$/, '');
 
@@ -121,10 +122,8 @@ function matchesCategory(row: WalletRow, category: Category) {
   return labels.some((tag) => tag.includes(category));
 }
 
-function MobileWalletCard({ row }: { row: WalletRow }) {
-  const router = useRouter();
-  const href = `/wallet/${row.address}`;
-  const openDetail = () => router.push(href);
+function MobileWalletCard({ row, onOpen }: { row: WalletRow; onOpen: () => void }) {
+  const openDetail = onOpen;
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
@@ -187,8 +186,32 @@ export default function Leaderboard({
   const [rowLimit, setRowLimit] = useState(ROW_BATCH);
   const [isLoadingPage, setIsLoadingPage] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [selectedWallet, setSelectedWallet] = useState<WalletRow | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const lastNavigatedAddressRef = useRef('');
+
+  const openWallet = useCallback((row: WalletRow) => {
+    const useOverlay = document.documentElement.dataset.telegramMiniApp === 'true'
+      || window.matchMedia('(max-width: 760px)').matches
+      || window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    if (!useOverlay) {
+      router.push(`/wallet/${row.address}`);
+      return;
+    }
+    window.history.pushState(
+      { ...(window.history.state || {}), robincopWalletOverlay: true },
+      '',
+      `/wallet/${row.address}`,
+    );
+    setSelectedWallet(row);
+  }, [router]);
+
+  const dismissWallet = useCallback(() => {
+    setSelectedWallet(null);
+    if (window.history.state?.robincopWalletOverlay && window.location.pathname.startsWith('/wallet/')) {
+      window.history.replaceState(null, '', '/#leaderboard');
+    }
+  }, []);
 
   const categoryCounts = useMemo(() => {
     const loadedCounts = Object.fromEntries(categories.map(({ key }) => [
@@ -222,18 +245,22 @@ export default function Leaderboard({
       : exactRow?.address ?? (matchingRows.length === 1 ? matchingRows[0].address : null);
     if (!address) return;
     lastNavigatedAddressRef.current = address.toLocaleLowerCase();
-    router.push(`/wallet/${address}`);
-  }, [loadedRows, matchingRows, query, router]);
+    const row = loadedRows.find((item) => item.address.toLocaleLowerCase() === address.toLocaleLowerCase());
+    if (row) openWallet(row);
+    else router.push(`/wallet/${address}`);
+  }, [loadedRows, matchingRows, openWallet, query, router]);
 
   useEffect(() => {
     const address = query.trim().toLocaleLowerCase();
     if (!WALLET_ADDRESS_PATTERN.test(address) || lastNavigatedAddressRef.current === address) return;
     const timer = setTimeout(() => {
       lastNavigatedAddressRef.current = address;
-      router.push(`/wallet/${address}`);
+      const row = loadedRows.find((item) => item.address.toLocaleLowerCase() === address);
+      if (row) openWallet(row);
+      else router.push(`/wallet/${address}`);
     }, 180);
     return () => clearTimeout(timer);
-  }, [query, router]);
+  }, [loadedRows, openWallet, query, router]);
 
   const loadNextPage = useCallback(async () => {
     if (isLoadingPage || !hasUnloadedRows) return;
@@ -242,6 +269,7 @@ export default function Leaderboard({
     try {
       const response = await fetch(`${publicApiUrl}/api/v1/wallets?limit=${API_PAGE_SIZE}&offset=${loadedRows.length}`, {
         headers: { Accept: 'application/json' },
+        cache: 'force-cache',
       });
       if (!response.ok) throw new Error(`Wallet page request failed (${response.status})`);
       const payload = await response.json() as { items?: WalletListItem[] };
@@ -274,20 +302,23 @@ export default function Leaderboard({
   }, [hasUnloadedRows, hasUnrevealedRows, loadNextPage, visibleRows.length]);
 
   return (
-    <section className="leaderboard" id="leaderboard">
+    <>
+      <section className="leaderboard" id="leaderboard">
       <div className="compact-leader-head"><div className="compact-title"><h1>Smart money wallets worth copying</h1></div><div className="table-actions"><form className="search-box" onSubmit={navigateFromSearch}><button className="search-submit" type="submit" aria-label="Open wallet search result">⌕</button><input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setRowLimit(ROW_BATCH); }} placeholder="Search wallet or name" aria-label="Search wallet or name" /></form></div></div>
       <div className="table-toolbar"><div className="filters" role="group" aria-label="Filter wallets by category">{categories.map(({ key, label }) => <button type="button" className={category === key ? 'filter active' : 'filter'} aria-pressed={category === key} onClick={() => { setCategory(key); setRowLimit(ROW_BATCH); }} key={key}>{label} <b>{categoryCounts[key]}</b></button>)}</div><div className="table-summary"><span>{matchingTotal} wallets</span><span>5K trades</span><span>±2.5% copy model</span><span className="table-updated"><i className="live-dot" /> {isSnapshot ? 'Snapshot' : 'Live'}</span></div></div>
       <div className="table-wrap"><table className="leader-table"><thead><tr><th>Target wallet</th><th className="score-col">Score ↓</th><th><span className="th-title">Copy PnL</span><small>14 calendar days</small></th><th>Actual PnL</th><th>Copy PnL</th><th>Win rate</th><th>Copy loss</th><th>PnL ratio</th><th>Days</th><th><span className="th-title">Median hold</span><small>closed positions</small></th><th>Rec 20 PnL</th><th>Rec 20 WR</th><th>Rec 20 loss</th><th>Tokens</th><th>PnL/Vol</th><th>Avg invest</th></tr></thead>
-        <tbody>{visibleRows.length ? visibleRows.map((row) => <LeaderboardRow key={row.address} href={`/wallet/${row.address}`} label={`Open ${row.name} wallet details`}>
+        <tbody>{visibleRows.length ? visibleRows.map((row) => <LeaderboardRow key={row.address} href={`/wallet/${row.address}`} label={`Open ${row.name} wallet details`} onOpenOverlay={() => openWallet(row)}>
           <td className="wallet-cell"><span className="wallet-identity"><span className="wallet-copy-layout"><span className="wallet-copy-info"><span className="wallet-name">{row.name}</span><span className="wallet-address-line"><small>{row.address.slice(0, 7)}…{row.address.slice(-5)}</small><CopyAddressButton address={row.address} /></span></span><a className="copy-trade-link wallet-copy-trade-link" href={`https://t.me/RobinCop_AI_Bot?start=A_ZETLYPGS_${row.address}`} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()} aria-label={`Copy trade wallet ${row.address}`} title="Open this wallet in RobinCop Bot">Copy</a></span></span></td>
           <td><span className="score">{row.score}</span></td><td><MiniBars values={row.copyDaily} /></td><td className={row.actualPnl >= 0 ? 'positive' : 'negative'}>{money(row.actualPnl, true)}</td><td className={`${row.copyPnl >= 0 ? 'positive' : 'negative'} strong`}>{money(row.copyPnl, true)}</td><td className="positive">{row.winRate.toFixed(1)}%</td><td>{row.lossRate.toFixed(1)}%</td><td>{row.pnlRatio.toFixed(2)}</td><td>{row.days}</td><td>{duration(row.medianHoldSeconds)}</td><td className={row.recentPnl >= 0 ? 'positive' : 'negative'}>{money(row.recentPnl, true)}</td><td className="positive">{row.recentWinRate.toFixed(1)}%</td><td>{row.recentLossRate === null ? 'N/A' : `${row.recentLossRate.toFixed(1)}%`}</td><td>{row.tokens}</td><td className="positive">+{row.pnlVolume.toFixed(2)}%</td><td>${row.avgInvest.toFixed(2)}</td>
         </LeaderboardRow>) : <tr><td className="leaderboard-empty" colSpan={16}>No wallets match this search and category.</td></tr>}</tbody></table></div>
       <div className="mobile-wallet-list">{visibleRows.length
-        ? visibleRows.map((row) => <MobileWalletCard key={row.address} row={row} />)
+        ? visibleRows.map((row) => <MobileWalletCard key={row.address} row={row} onOpen={() => openWallet(row)} />)
         : <div className="mobile-wallet-empty">No wallets match this search and category.</div>}
       </div>
       {(hasUnrevealedRows || hasUnloadedRows) && <div ref={sentinelRef} className="list-infinite-sentinel" role="status" aria-live="polite"><span className={isLoadingPage ? 'detail-loading-spinner' : ''} />{loadFailed ? 'Unable to load more wallets. Scroll away and back to retry.' : isLoadingPage ? 'Loading more wallets…' : 'More wallets load automatically as you scroll'}</div>}
       <footer className="table-footer"><span>{`${matchingRows.length} loaded · ${total} qualified wallets`}</span><span>Sorted by Robin Score · {isSnapshot ? 'Verified snapshot' : 'Live feed'}</span></footer>
-    </section>
+      </section>
+      {selectedWallet && <WalletDetailOverlay preview={selectedWallet} onDismiss={dismissWallet} />}
+    </>
   );
 }

@@ -744,6 +744,77 @@ body:has(.app-shell),body:has(.detail-shell) { background: #000; }
   .detail-shell .metric-grid { grid-template-columns: repeat(9,minmax(135px,1fr)); }
 }
 
+/* Mobile and Telegram wallet details stay above the mounted leaderboard. */
+.wallet-detail-overlay {
+  background: #000;
+  color: var(--text);
+  display: grid;
+  grid-template-rows: auto minmax(0,1fr);
+  inset: 0;
+  isolation: isolate;
+  position: fixed;
+  z-index: 100;
+}
+.wallet-detail-overlay-nav {
+  align-items: center;
+  background: rgba(0,0,0,.97);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  height: 52px;
+  justify-content: space-between;
+  padding: 0 max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left));
+  position: relative;
+  z-index: 2;
+}
+.wallet-detail-overlay-back {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0;
+}
+.wallet-detail-overlay-back:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+.wallet-detail-overlay-address { color: var(--muted); font-family: var(--font-geist-mono); font-size: 10px; }
+.wallet-detail-overlay-scroll {
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;
+  overscroll-behavior-y: contain;
+  overflow-y: auto;
+}
+.wallet-detail-overlay-content { min-height: 100%; padding-bottom: max(36px,env(safe-area-inset-bottom)); }
+.wallet-detail-overlay-progress,.wallet-detail-overlay-error {
+  align-items: center;
+  background: rgba(8,8,8,.96);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  display: flex;
+  font-size: 11px;
+  gap: 9px;
+  margin: 12px 16px 0;
+  padding: 12px 14px;
+}
+.wallet-detail-overlay-error { color: var(--text-2); }
+.wallet-detail-overlay-error button,.wallet-detail-overlay-error a {
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  margin-left: auto;
+  padding: 6px 9px;
+  text-decoration: none;
+}
+.wallet-detail-overlay-error a { margin-left: 0; }
+
 /* Telegram Mini App container compatibility. These rules only activate in Telegram. */
 html[data-telegram-mini-app='true'],
 html[data-telegram-mini-app='true'] body {
@@ -772,8 +843,15 @@ html[data-telegram-mini-app='true'] .detail-shell .detail-nav {
   padding-right: 16px;
   padding-top: var(--tg-content-safe-area-inset-top, 0px);
 }
-html[data-telegram-mini-app='true'] .detail-shell .back-link {
-  display: none;
+html[data-telegram-mini-app='true'] .detail-shell .back-link { display: inline-flex; }
+html[data-telegram-mini-app='true'] .wallet-detail-overlay-nav {
+  height: calc(52px + var(--tg-content-safe-area-inset-top, 0px));
+  padding-left: max(16px,var(--tg-content-safe-area-inset-left,0px));
+  padding-right: max(16px,var(--tg-content-safe-area-inset-right,0px));
+  padding-top: var(--tg-content-safe-area-inset-top, 0px);
+}
+html[data-telegram-mini-app='true'] .wallet-detail-overlay-content {
+  padding-bottom: max(36px,var(--tg-content-safe-area-inset-bottom,0px),env(safe-area-inset-bottom));
 }
 html[data-telegram-mini-app='true'] .trade-drawer-layer {
   bottom: max(var(--tg-content-safe-area-inset-bottom, 0px), env(safe-area-inset-bottom));

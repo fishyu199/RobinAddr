@@ -4,7 +4,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Float, Integer, String, and_, cast, func, or_, select, update
 from sqlalchemy.orm import Session
@@ -94,7 +94,7 @@ def _sample_rows(rows: list[Any], limit: int) -> list[Any]:
     return [row for index, row in enumerate(rows) if index in indexes]
 
 
-def compact_detail_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
+def compact_detail_metrics(metrics: dict[str, Any], *, summary_only: bool = False) -> dict[str, Any]:
     """Return only the data rendered by the web detail page.
 
     Full analysis payloads can exceed several megabytes. Keeping the original
@@ -105,6 +105,12 @@ def compact_detail_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
 
     equity_curve = metrics.get("equity_curve")
     compact["equity_curve"] = _sample_rows(equity_curve, 360) if isinstance(equity_curve, list) else []
+
+    if summary_only:
+        compact["all_tokens"] = []
+        compact["position_rows"] = []
+        compact["trade_results"] = []
+        return compact
 
     per_token = metrics.get("per_token")
     per_token_rows = [row for row in (per_token if isinstance(per_token, list) else []) if isinstance(row, dict)]
@@ -159,6 +165,7 @@ def wallet_payload(
     *,
     detailed: bool = False,
     compact_details: bool = False,
+    summary_only: bool = False,
 ) -> dict[str, Any]:
     metrics = wallet.metrics or {}
     summary = wallet.summary or build_wallet_summary(metrics)
@@ -187,7 +194,7 @@ def wallet_payload(
         "analyzed_at": wallet.analyzed_at,
     }
     if detailed:
-        payload["metrics"] = compact_detail_metrics(metrics) if compact_details else metrics
+        payload["metrics"] = compact_detail_metrics(metrics, summary_only=summary_only) if compact_details else metrics
     return payload
 
 
@@ -291,12 +298,14 @@ def health() -> dict[str, str]:
 
 @app.get("/api/v1/wallets")
 def list_wallets(
+    response: Response,
     search: str = "",
     tag: str = "",
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=120"
     score_threshold = analysis_policy(db)["score_threshold"]
     conditions = [
         PublishedWallet.listed.is_(True),
@@ -349,13 +358,21 @@ def list_wallets(
 @app.get("/api/v1/wallets/{address}")
 def get_wallet(
     address: str,
+    response: Response,
     compact: bool = Query(default=False),
+    summary_only: bool = Query(default=False),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=120"
     wallet = db.get(PublishedWallet, normalize_wallet_address(address))
     if wallet is None or wallet.manual_unlisted:
         raise HTTPException(status_code=404, detail="Wallet not found")
-    return wallet_payload(wallet, detailed=True, compact_details=compact)
+    return wallet_payload(
+        wallet,
+        detailed=True,
+        compact_details=compact,
+        summary_only=summary_only,
+    )
 
 
 @app.post("/api/v1/wallets/{address}/analysis")
