@@ -76,9 +76,12 @@ const money = (value: OptionalNumber, signed = true) => {
 };
 const pnlWithRate = (pnl: OptionalNumber, rate: OptionalNumber) => {
   if (pnl === null) return '—';
-  if (rate === null) return `${money(pnl)} —`;
-  const sign = rate > 0 ? '+' : rate < 0 ? '-' : '';
-  return `${money(pnl)} ${sign}${Math.abs(rate).toFixed(2)}%`;
+  const sign = rate === null ? '' : rate > 0 ? '+' : rate < 0 ? '-' : '';
+  const formattedRate = rate === null ? '—' : `${sign}${Math.abs(rate).toFixed(2)}%`;
+  return <span className="pnl-with-rate" aria-label={`${money(pnl)}, ${formattedRate}`}>
+    <span>{money(pnl)}</span>
+    <small>{formattedRate}</small>
+  </span>;
 };
 const number = (value: OptionalNumber) => value === null ? '—' : value.toLocaleString('en-US', { maximumFractionDigits: 4 });
 const price = (value: OptionalNumber) => value === null
