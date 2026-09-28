@@ -176,6 +176,11 @@ export default function TelegramMiniApp() {
     }
 
     const handleBack = () => {
+      if (document.documentElement.dataset.tokenDrawerOpen === 'true') {
+        window.dispatchEvent(new Event('robincop:close-token-drawer'));
+        return;
+      }
+
       let hasSameOriginReferrer = false;
       try {
         hasSameOriginReferrer = Boolean(document.referrer && new URL(document.referrer).origin === window.location.origin);

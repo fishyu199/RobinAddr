@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 type OptionalNumber = number | null;
 type SortDirection = 'asc' | 'desc';
@@ -237,6 +238,7 @@ export default function WalletDataTabs({
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [drawerError, setDrawerError] = useState('');
   const tradeRequest = useRef<AbortController | null>(null);
+  const drawerCloseButton = useRef<HTMLButtonElement | null>(null);
   const summaryMode = trades.length > 0 && trades.every((row) => row.isSummary);
   const positionCount = positions.length;
   const historyCount = totalHistory === null ? history.length : Math.round(totalHistory);
@@ -264,11 +266,11 @@ export default function WalletDataTabs({
   const updateHistorySort = (column: HistorySortKey, preferred: SortDirection) => setHistorySort((current) => nextSort(current, column, preferred));
   const updateTradeSort = (column: TradeSortKey, preferred: SortDirection) => setTradeSort((current) => nextSort(current, column, preferred));
 
-  const closeDrawer = () => {
+  const closeDrawer = useCallback(() => {
     tradeRequest.current?.abort();
     tradeRequest.current = null;
     setSelectedToken(null);
-  };
+  }, []);
 
   const openToken = async (row: DrawerToken) => {
     tradeRequest.current?.abort();
@@ -325,16 +327,28 @@ export default function WalletDataTabs({
   useEffect(() => {
     if (!selectedToken) return;
     const previousOverflow = document.body.style.overflow;
+    const overlayScroll = document.querySelector<HTMLElement>('.wallet-detail-overlay-scroll');
+    const previousOverlayOverflow = overlayScroll?.style.overflow ?? '';
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') closeDrawer();
     };
+    const onCloseRequest = () => closeDrawer();
+
     document.body.style.overflow = 'hidden';
+    if (overlayScroll) overlayScroll.style.overflow = 'hidden';
+    document.documentElement.dataset.tokenDrawerOpen = 'true';
     window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('robincop:close-token-drawer', onCloseRequest);
+    drawerCloseButton.current?.focus();
+
     return () => {
       document.body.style.overflow = previousOverflow;
+      if (overlayScroll) overlayScroll.style.overflow = previousOverlayOverflow;
+      delete document.documentElement.dataset.tokenDrawerOpen;
       window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('robincop:close-token-drawer', onCloseRequest);
     };
-  }, [selectedToken]);
+  }, [closeDrawer, selectedToken]);
 
   useEffect(() => () => tradeRequest.current?.abort(), []);
 
@@ -455,7 +469,7 @@ export default function WalletDataTabs({
         {tab === 'trades' && visibleTrades.length < sortedTrades.length && <div className="detail-load-more-wrap"><button className="load-more-button" type="button" onClick={() => setTradeLimit((current) => current + ROW_BATCH)}>Show more trades <span>{visibleTrades.length}/{sortedTrades.length}</span></button></div>}
       </div>
     </section>
-    {selectedToken && <div className="trade-drawer-layer">
+    {selectedToken && createPortal(<div className="trade-drawer-layer">
       <button className="trade-drawer-backdrop" type="button" aria-label="Close trade details" onClick={closeDrawer} />
       <aside className="trade-drawer" role="dialog" aria-modal="true" aria-labelledby="trade-drawer-title">
         <header className="trade-drawer-head">
@@ -464,7 +478,7 @@ export default function WalletDataTabs({
             <h2 id="trade-drawer-title">{selectedToken.symbol || 'Unknown token'}</h2>
             <small>{selectedToken.address}</small>
           </div>
-          <button type="button" className="trade-drawer-close" onClick={closeDrawer} aria-label="Close trade details">×</button>
+          <button ref={drawerCloseButton} type="button" className="trade-drawer-close" onClick={closeDrawer} aria-label="Close trade details">×</button>
         </header>
         <section className="trade-drawer-summary" aria-label="Token summary">
           <div><span>Status</span><strong>{selectedToken.status}</strong></div>
@@ -499,7 +513,7 @@ export default function WalletDataTabs({
           </>}
         </div>
       </aside>
-    </div>}
+    </div>, document.body)}
     </>
   );
 }

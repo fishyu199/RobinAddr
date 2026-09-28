@@ -30,6 +30,10 @@ export default function WalletDetailOverlay({ preview, onDismiss }: {
   const requestVersionRef = useRef(0);
 
   const close = useCallback(() => {
+    if (document.documentElement.dataset.tokenDrawerOpen === 'true') {
+      window.dispatchEvent(new Event('robincop:close-token-drawer'));
+      return;
+    }
     if (window.history.state?.robincopWalletOverlay) {
       window.history.back();
       return;
@@ -78,7 +82,13 @@ export default function WalletDetailOverlay({ preview, onDismiss }: {
       event.preventDefault();
       close();
     };
-    const handlePopState = () => onDismiss();
+    const handlePopState = () => {
+      if (document.documentElement.dataset.tokenDrawerOpen === 'true') {
+        window.dispatchEvent(new Event('robincop:close-token-drawer'));
+        return;
+      }
+      onDismiss();
+    };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('popstate', handlePopState);
 
