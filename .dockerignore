@@ -1,0 +1,17 @@
+.git
+.gitignore
+.cache
+.env
+.venv
+**/__pycache__
+**/*.pyc
+apps/web/.git
+apps/web/node_modules
+apps/web/dist
+apps/web/.next
+apps/web/.vinext
+reports
+sources
+assets
+gitbook
+deploy-backups

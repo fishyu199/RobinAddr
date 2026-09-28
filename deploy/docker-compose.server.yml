@@ -1,0 +1,193 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    cpus: 0.75
+    mem_limit: 1024m
+    pids_limit: 160
+    logging: *default-logging
+    env_file: ../.env
+    environment:
+      POSTGRES_DB: robincop
+      POSTGRES_USER: robincop
+    volumes:
+      - robincop_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U robincop"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    cpus: 0.25
+    mem_limit: 256m
+    pids_limit: 80
+    logging: *default-logging
+    command: redis-server --appendonly yes
+    volumes:
+      - robincop_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    cpus: 0.6
+    mem_limit: 512m
+    pids_limit: 160
+    logging: *default-logging
+    env_file: ../.env
+    ports:
+      - "127.0.0.1:8883:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  worker:
+    build:
+      context: ..
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    cpus: 0.8
+    mem_limit: 768m
+    pids_limit: 160
+    logging: *default-logging
+    command: celery -A robincop_api.celery_app:celery_app worker --loglevel=INFO --pool=prefork --concurrency=1 --max-tasks-per-child=20 --hostname=analysis@%h --queues=analysis,celery
+    stop_grace_period: 2m
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A robincop_api.celery_app:celery_app inspect ping -d \"analysis@$$HOSTNAME\" --timeout=5 | grep -q pong"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  serial-worker:
+    build:
+      context: ..
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    cpus: 0.8
+    mem_limit: 768m
+    pids_limit: 160
+    logging: *default-logging
+    command: celery -A robincop_api.celery_app:celery_app worker --loglevel=INFO --pool=prefork --concurrency=1 --max-tasks-per-child=20 --hostname=serial@%h --queues=serial_analysis
+    stop_grace_period: 2m
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A robincop_api.celery_app:celery_app inspect ping -d \"serial@$$HOSTNAME\" --timeout=5 | grep -q pong"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  collector:
+    build:
+      context: ..
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    cpus: 0.35
+    mem_limit: 384m
+    pids_limit: 100
+    logging: *default-logging
+    command: celery -A robincop_api.celery_app:celery_app worker --loglevel=INFO --pool=prefork --concurrency=1 --max-tasks-per-child=50 --hostname=collector@%h --queues=collection
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A robincop_api.celery_app:celery_app inspect ping -d \"collector@$$HOSTNAME\" --timeout=5 | grep -q pong"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  scheduler:
+    build:
+      context: ..
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    cpus: 0.15
+    mem_limit: 192m
+    pids_limit: 80
+    logging: *default-logging
+    command: celery -A robincop_api.celery_app:celery_app beat --loglevel=INFO
+    env_file: ../.env
+    depends_on:
+      - collector
+    healthcheck:
+      test: ["CMD-SHELL", "test -n \"$$(find /app/celerybeat-schedule -mmin -7 -print -quit 2>/dev/null)\""]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 8m
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: /robincop-api
+        NEXT_PUBLIC_SITE_URL: https://robincop.com
+    restart: unless-stopped
+    cpus: 0.6
+    mem_limit: 512m
+    pids_limit: 160
+    logging: *default-logging
+    environment:
+      API_INTERNAL_URL: http://api:8000
+      API_TIMEOUT_MS: 8000
+      NEXT_PUBLIC_API_URL: /robincop-api
+      NEXT_PUBLIC_SITE_URL: https://robincop.com
+    ports:
+      - "127.0.0.1:8224:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/robincop-logo.png"]
+      interval: 30s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  robincop_postgres:
+  robincop_redis:

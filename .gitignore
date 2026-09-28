@@ -1,0 +1,40 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+
+# Node.js and web builds
+node_modules/
+.next/
+.vinext/
+.wrangler/
+out/
+apps/web/dist/
+apps/web/next-env.d.ts
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+
+# Runtime output
+.cache/
+reports/
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
+*.swp
