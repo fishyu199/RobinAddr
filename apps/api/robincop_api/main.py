@@ -301,6 +301,9 @@ def list_wallets(
     response: Response,
     search: str = "",
     tag: str = "",
+    min_score: int | None = Query(
+        default=None, ge=0, le=100, description="Only return wallets with a score strictly greater than this value."
+    ),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -311,6 +314,8 @@ def list_wallets(
         PublishedWallet.listed.is_(True),
         PublishedWallet.score > score_threshold,
     ]
+    if min_score is not None:
+        conditions.append(PublishedWallet.score > min_score)
     if search:
         pattern = f"%{search}%"
         conditions.append(

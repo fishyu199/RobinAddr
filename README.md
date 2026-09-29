@@ -55,6 +55,18 @@ make clean             # 清理缓存和可再生成的构建产物
 
 更多本地配置与运行说明见 [`DEVELOPMENT.md`](DEVELOPMENT.md)。
 
+## 地址列表 API
+
+`GET /api/v1/wallets` 支持 `search`（地址或名称模糊搜索）、`tag`（精确标签）、`min_score`（评分严格大于指定值）、`limit`（1–200，默认 50）和 `offset`（默认 0）。
+
+例如，筛选评分大于 50 的上榜地址：
+
+```bash
+curl 'https://robincop.com/robincop-api/api/v1/wallets?min_score=50&limit=200'
+```
+
+`min_score` 为 0–100 的整数，可与搜索、标签和分页组合。不传时保持原有行为；始终只返回已上榜且超过系统发布门槛的钱包，按评分降序排列。`total` 和 `category_counts` 统计筛选后的全部结果，不受当前页大小影响。该接口只读取数据库，不触发重新分析。
+
 ## 代码边界
 
 - `copybot/` 不依赖 Web 或数据库，保持计算结果可复现、可单测。
