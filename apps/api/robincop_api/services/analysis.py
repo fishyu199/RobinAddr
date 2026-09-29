@@ -76,7 +76,7 @@ def analyze_and_store(
     try:
         output = analyze_wallet(
             address,
-            lang="en",
+            lang="zh-CN",
             client="web",
             include_all_tokens=True,
             max_trades=settings.max_trades,
@@ -85,6 +85,9 @@ def analyze_and_store(
             cache_dir=None,
         )
         metrics = output["metrics"]
+        report_text = output["report_text"]
+        if not isinstance(report_text, str) or not report_text.strip():
+            raise ValueError("Analysis returned an empty report")
         score = int(metrics.get("score") or 0)
         policy = analysis_policy(db)
         score_threshold = policy["score_threshold"]
@@ -121,6 +124,7 @@ def analyze_and_store(
         published.actual_pnl = float(metrics.get("actual_pnl") or 0)
         published.copy_pnl = float(metrics.get("copy_backtest_pnl") or 0)
         published.metrics = metrics
+        published.report_text = report_text
         published.summary = build_wallet_summary(metrics)
         published.listed = qualifies and not published.manual_unlisted
         published.algorithm_version = ALGORITHM_VERSION
@@ -143,6 +147,9 @@ def analyze_and_store(
         run.completed_at = datetime.now(timezone.utc)
         db.commit()
     except Exception as exc:
+        # Preserve the previous successful metrics/report pair if this attempt
+        # fails after modifying ORM objects but before the final commit.
+        db.rollback()
         run.status = "failed"
         run.error = str(exc)
         run.completed_at = datetime.now(timezone.utc)

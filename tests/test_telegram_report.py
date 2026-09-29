@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import unittest
 from decimal import Decimal
+from unittest.mock import patch
 
 from copybot import SUPPORTED_LANGUAGES, Trade, render_telegram_report, run_backtest
+from copybot.analytics import build_legacy_metrics
 
 
 class TelegramReportTests(unittest.TestCase):
@@ -55,6 +57,24 @@ class TelegramReportTests(unittest.TestCase):
                 )
                 self.assertIn(title, report)
                 self.assertLessEqual(len(report), 4_096)
+
+    def test_stored_metrics_render_the_same_report_without_recalculation(self) -> None:
+        result = self._simple_result()
+        profile = {"name": "Name <One>"}
+        metrics = result.to_dict()
+        metrics.update(build_legacy_metrics(result, now_ms=1_700_001_000_000))
+        metrics["score"] = 77
+        metrics["gmgn_stats_30d"] = {"common": profile}
+        expected = render_telegram_report(result, metrics=metrics, profile=profile, wallet_address="0xwallet")
+        with patch("copybot.telegram_report.build_legacy_metrics", side_effect=AssertionError("must not recalculate")):
+            actual = render_telegram_report(metrics=metrics, wallet_address="0xwallet")
+        self.assertEqual(actual, expected)
+        self.assertIn("77/100", actual)
+        self.assertIn("Name &lt;One&gt;", actual)
+
+    def test_missing_report_input_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            render_telegram_report()
 
     def test_report_is_telegram_html_and_escapes_dynamic_text(self) -> None:
         trades = [

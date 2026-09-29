@@ -67,6 +67,14 @@ curl 'https://robincop.com/robincop-api/api/v1/wallets?min_score=50&limit=200'
 
 `min_score` 为 0–100 的整数，可与搜索、标签和分页组合。不传时保持原有行为；始终只返回已上榜且超过系统发布门槛的钱包，按评分降序排列。`total` 和 `category_counts` 统计筛选后的全部结果，不受当前页大小影响。该接口只读取数据库，不触发重新分析。
 
+## 地址报告 API
+
+`GET /api/v1/wallets/{address}` 返回 `report_text`：最新一次成功分析对应的中文 Telegram HTML 报告，包含换行及 `<b>`、`<pre>` 等标签。`compact` 和 `summary_only` 模式也返回该字段；列表接口不返回报告正文。
+
+报告与指标一起存入 PostgreSQL 的 `published_wallets.report_text`（TEXT）。每次分析成功覆盖该地址的上一份报告，不保留历史报告正文；分析失败保留上次成功的报告和指标。详情 GET 只读取数据库，不调用分析脚本或 GMGN。
+
+升级前的记录暂时返回 `report_text: null`，可在迁移后使用已有指标补生成，或等待下一次成功分析。迁移与补生成命令见 [`DEVELOPMENT.md`](DEVELOPMENT.md#stored-wallet-reports)。
+
 ## 代码边界
 
 - `copybot/` 不依赖 Web 或数据库，保持计算结果可复现、可单测。

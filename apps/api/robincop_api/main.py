@@ -194,6 +194,7 @@ def wallet_payload(
         "analyzed_at": wallet.analyzed_at,
     }
     if detailed:
+        payload["report_text"] = wallet.report_text
         payload["metrics"] = compact_detail_metrics(metrics, summary_only=summary_only) if compact_details else metrics
     return payload
 

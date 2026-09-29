@@ -48,6 +48,7 @@ class PublishedWallet(Base):
     actual_pnl: Mapped[float] = mapped_column(Float, default=0)
     copy_pnl: Mapped[float] = mapped_column(Float, default=0)
     metrics: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    report_text: Mapped[str | None] = mapped_column(Text)
     summary: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     listed: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     manual_unlisted: Mapped[bool] = mapped_column(Boolean, default=False)

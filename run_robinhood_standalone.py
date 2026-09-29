@@ -11,7 +11,7 @@ Usage:
 
 from __future__ import annotations
 
-__standalone_source_sha256__ = "1f5a9b160f31fa20db9a471ff180d87ff1d9b201ed4ceaf22b71bb41e7a46e98"
+__standalone_source_sha256__ = "3c07f56ea1d5a6a7368558f4abc6182069d6c7334c3e803fc662e64405215412"
 
 
 # ===== BEGIN copybot/decimal_utils.py =====
@@ -1281,6 +1281,7 @@ def build_legacy_metrics(result: BacktestResult, *, wallet_address: str='', prof
 
 # ===== BEGIN copybot/telegram_report.py =====
 import unicodedata
+from dataclasses import dataclass, fields
 from html import escape
 from typing import Any, Mapping
 TELEGRAM_TEXT_LIMIT = 4096
@@ -1320,7 +1321,13 @@ def _identity(profile: Mapping[str, Any]) -> str:
         label += f' (@{escape(username)})'
     return label
 
-def _build_report(result: BacktestResult, metrics: Mapping[str, Any], *, wallet_address: str, lang: str, profile: Mapping[str, Any], referral_url: str, recent_limit: int, daily_limit: int, show_older: bool) -> str:
+@dataclass(frozen=True)
+class _StoredReportContext:
+    config: BacktestConfig
+    data_quality: Mapping[str, Any]
+    processed_trade_count: int
+
+def _build_report(result: BacktestResult | _StoredReportContext, metrics: Mapping[str, Any], *, wallet_address: str, lang: str, profile: Mapping[str, Any], referral_url: str, recent_limit: int, daily_limit: int, show_older: bool) -> str:
     lang = normalize_language(lang)
     wallet = escape(wallet_address or 'unknown')
     referral = escape(referral_url, quote=True)
@@ -1381,13 +1388,25 @@ def _build_report(result: BacktestResult, metrics: Mapping[str, Any], *, wallet_
     lines.extend([f'''<a href="{referral}">⚡️ {escape(_t(lang, 'copy_with'))}</a>''', '<i>' + escape(_t(lang, 'footer').format(count=f'{result.processed_trade_count:,}', buy=f'{buy_penalty:g}', sell=f'{sell_penalty:g}–{max_sell_penalty:g}')) + '</i>'])
     return '\n'.join(lines)
 
-def render_telegram_report(result: BacktestResult, *, wallet_address: str='', lang: str='zh-CN', profile: Mapping[str, Any] | None=None, metrics: Mapping[str, Any] | None=None, referral_url: str=DEFAULT_REFERRAL_URL, max_length: int=TELEGRAM_TEXT_LIMIT) -> str:
-    """Render Telegram-safe HTML and reduce tables until it fits Telegram."""
+def render_telegram_report(result: BacktestResult | None=None, *, wallet_address: str='', lang: str='zh-CN', profile: Mapping[str, Any] | None=None, metrics: Mapping[str, Any] | None=None, referral_url: str=DEFAULT_REFERRAL_URL, max_length: int=TELEGRAM_TEXT_LIMIT) -> str:
+    """Render Telegram HTML from a backtest or stored metrics without recalculating."""
+    context: BacktestResult | _StoredReportContext
+    if result is None:
+        if metrics is None:
+            raise ValueError('A backtest result or complete stored metrics is required')
+        config_keys = {field.name for field in fields(BacktestConfig)}
+        context = _StoredReportContext(config=BacktestConfig.create(**{key: value for key, value in metrics['config'].items() if key in config_keys}), data_quality=metrics['data_quality'], processed_trade_count=int(metrics['processed_trade_count']))
+        if profile is None:
+            profile = (metrics.get('gmgn_stats_30d') or {}).get('common') or {}
+    else:
+        context = result
     profile = profile or {}
-    metrics = metrics or build_legacy_metrics(result, wallet_address=wallet_address, profile=profile)
+    if metrics is None:
+        assert result is not None
+        metrics = build_legacy_metrics(result, wallet_address=wallet_address, profile=profile)
     layouts = ((7, 14, True), (7, 7, False), (5, 5, False), (3, 3, False), (0, 0, False))
     for recent_limit, daily_limit, show_older in layouts:
-        report = _build_report(result, metrics, wallet_address=wallet_address, lang=lang, profile=profile, referral_url=referral_url, recent_limit=recent_limit, daily_limit=daily_limit, show_older=show_older)
+        report = _build_report(context, metrics, wallet_address=wallet_address, lang=lang, profile=profile, referral_url=referral_url, recent_limit=recent_limit, daily_limit=daily_limit, show_older=show_older)
         if len(report) <= max_length:
             return report
     raise ValueError('Telegram report summary exceeds the configured text limit')

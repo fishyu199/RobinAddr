@@ -28,7 +28,10 @@ export type WalletListItem = {
   data_source?: 'live' | 'snapshot';
 };
 
-export type WalletDetail = WalletListItem & { metrics: Record<string, unknown> };
+export type WalletDetail = WalletListItem & {
+  metrics: Record<string, unknown>;
+  report_text?: string | null;
+};
 
 export type WalletCategoryCounts = {
   all: number;

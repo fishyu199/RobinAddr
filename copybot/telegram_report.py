@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import unicodedata
+from dataclasses import dataclass, fields
 from html import escape
 from typing import Any, Mapping
 
 from .analytics import DEFAULT_REFERRAL_URL, build_legacy_metrics
-from .models import BacktestResult
+from .models import BacktestConfig, BacktestResult
 
 
 TELEGRAM_TEXT_LIMIT = 4_096
@@ -221,8 +222,15 @@ def _identity(profile: Mapping[str, Any]) -> str:
     return label
 
 
+@dataclass(frozen=True)
+class _StoredReportContext:
+    config: BacktestConfig
+    data_quality: Mapping[str, Any]
+    processed_trade_count: int
+
+
 def _build_report(
-    result: BacktestResult,
+    result: BacktestResult | _StoredReportContext,
     metrics: Mapping[str, Any],
     *,
     wallet_address: str,
@@ -396,7 +404,7 @@ def _build_report(
 
 
 def render_telegram_report(
-    result: BacktestResult,
+    result: BacktestResult | None = None,
     *,
     wallet_address: str = "",
     lang: str = "zh-CN",
@@ -405,17 +413,31 @@ def render_telegram_report(
     referral_url: str = DEFAULT_REFERRAL_URL,
     max_length: int = TELEGRAM_TEXT_LIMIT,
 ) -> str:
-    """Render Telegram-safe HTML and reduce tables until it fits Telegram."""
+    """Render Telegram HTML from a backtest or stored metrics without recalculating."""
+    context: BacktestResult | _StoredReportContext
+    if result is None:
+        if metrics is None:
+            raise ValueError("A backtest result or complete stored metrics is required")
+        config_keys = {field.name for field in fields(BacktestConfig)}
+        context = _StoredReportContext(
+            config=BacktestConfig.create(**{
+                key: value for key, value in metrics["config"].items() if key in config_keys
+            }),
+            data_quality=metrics["data_quality"],
+            processed_trade_count=int(metrics["processed_trade_count"]),
+        )
+        if profile is None:
+            profile = (metrics.get("gmgn_stats_30d") or {}).get("common") or {}
+    else:
+        context = result
     profile = profile or {}
-    metrics = metrics or build_legacy_metrics(
-        result,
-        wallet_address=wallet_address,
-        profile=profile,
-    )
+    if metrics is None:
+        assert result is not None
+        metrics = build_legacy_metrics(result, wallet_address=wallet_address, profile=profile)
     layouts = ((7, 14, True), (7, 7, False), (5, 5, False), (3, 3, False), (0, 0, False))
     for recent_limit, daily_limit, show_older in layouts:
         report = _build_report(
-            result,
+            context,
             metrics,
             wallet_address=wallet_address,
             lang=lang,
