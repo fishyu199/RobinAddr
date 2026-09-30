@@ -62,10 +62,10 @@ class WalletReportTests(unittest.TestCase):
     def test_analysis_replaces_latest_report_and_does_not_archive_text(self) -> None:
         for score in (75, 80):
             metrics = stored_metrics(score)
-            report = render_telegram_report(metrics=metrics, wallet_address=ADDRESS)
+            report = render_telegram_report(metrics=metrics, wallet_address=ADDRESS, lang="en")
             with patch.object(analysis, "analyze_wallet", return_value={"metrics": metrics, "report_text": report}) as analyze:
                 run = analysis.analyze_and_store(self.db, ADDRESS, trigger="test")
-            self.assertEqual(analyze.call_args.kwargs["lang"], "zh-CN")
+            self.assertEqual(analyze.call_args.kwargs["lang"], "en")
             self.assertEqual(run.status, "completed")
             self.assertNotIn("report_text", run.result)
             self.db.expire_all()
@@ -138,11 +138,27 @@ class WalletReportTests(unittest.TestCase):
         self.assertEqual(counts["errors"], [])
         self.db.expire_all()
         wallet = self.db.get(PublishedWallet, ADDRESS)
-        self.assertEqual(wallet.report_text, render_telegram_report(metrics=original_metrics, wallet_address=ADDRESS))
+        self.assertEqual(wallet.report_text, render_telegram_report(metrics=original_metrics, wallet_address=ADDRESS, lang="en"))
         self.assertEqual(wallet.metrics, original_metrics)
         self.assertEqual(wallet.analyzed_at, original_time)
         self.assertEqual(self.db.get(PublishedWallet, other).report_text, "keep this report")
         self.assertEqual(backfill.backfill_reports(self.db, apply=True)["scanned"], 0)
+
+    def test_backfill_can_rewrite_existing_report_in_english(self) -> None:
+        wallet = self.add_wallet(report="<b>中文报告</b>")
+        original_metrics = copy.deepcopy(wallet.metrics)
+        original_time = wallet.analyzed_at
+        counts = backfill.backfill_reports(self.db, apply=True, overwrite=True)
+        self.assertEqual(counts["updated"], 1)
+        self.assertEqual(counts["errors"], [])
+        self.db.expire_all()
+        wallet = self.db.get(PublishedWallet, ADDRESS)
+        self.assertEqual(
+            wallet.report_text,
+            render_telegram_report(metrics=original_metrics, wallet_address=ADDRESS, lang="en"),
+        )
+        self.assertEqual(wallet.metrics, original_metrics)
+        self.assertEqual(wallet.analyzed_at, original_time)
 
     def test_backfill_does_not_write_report_from_an_older_analysis(self) -> None:
         self.add_wallet()

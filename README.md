@@ -69,7 +69,7 @@ curl 'https://robincop.com/robincop-api/api/v1/wallets?min_score=50&limit=200'
 
 ## 地址报告 API
 
-`GET /api/v1/wallets/{address}` 返回 `report_text`：最新一次成功分析对应的中文 Telegram HTML 报告，包含换行及 `<b>`、`<pre>` 等标签。`compact` 和 `summary_only` 模式也返回该字段；列表接口不返回报告正文。
+`GET /api/v1/wallets/{address}` 返回 `report_text`：最新一次成功分析对应的默认英文 Telegram HTML 报告，包含换行及 `<b>`、`<pre>` 等标签。`compact` 和 `summary_only` 模式也返回该字段；列表接口不返回报告正文。
 
 报告与指标一起存入 PostgreSQL 的 `published_wallets.report_text`（TEXT）。每次分析成功覆盖该地址的上一份报告，不保留历史报告正文；分析失败保留上次成功的报告和指标。详情 GET 只读取数据库，不调用分析脚本或 GMGN。
 

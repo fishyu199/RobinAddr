@@ -76,7 +76,7 @@ def analyze_and_store(
     try:
         output = analyze_wallet(
             address,
-            lang="zh-CN",
+            lang="en",
             client="web",
             include_all_tokens=True,
             max_trades=settings.max_trades,
