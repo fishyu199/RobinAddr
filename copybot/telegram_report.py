@@ -7,7 +7,7 @@ from dataclasses import dataclass, fields
 from html import escape
 from typing import Any, Mapping
 
-from .analytics import DEFAULT_REFERRAL_URL, build_legacy_metrics
+from .analytics import build_copy_trade_url, build_legacy_metrics
 from .models import BacktestConfig, BacktestResult
 
 
@@ -410,7 +410,7 @@ def render_telegram_report(
     lang: str = "zh-CN",
     profile: Mapping[str, Any] | None = None,
     metrics: Mapping[str, Any] | None = None,
-    referral_url: str = DEFAULT_REFERRAL_URL,
+    referral_url: str | None = None,
     max_length: int = TELEGRAM_TEXT_LIMIT,
 ) -> str:
     """Render Telegram HTML from a backtest or stored metrics without recalculating."""
@@ -434,6 +434,7 @@ def render_telegram_report(
     if metrics is None:
         assert result is not None
         metrics = build_legacy_metrics(result, wallet_address=wallet_address, profile=profile)
+    resolved_referral_url = referral_url or build_copy_trade_url(wallet_address)
     layouts = ((7, 14, True), (7, 7, False), (5, 5, False), (3, 3, False), (0, 0, False))
     for recent_limit, daily_limit, show_older in layouts:
         report = _build_report(
@@ -442,7 +443,7 @@ def render_telegram_report(
             wallet_address=wallet_address,
             lang=lang,
             profile=profile,
-            referral_url=referral_url,
+            referral_url=resolved_referral_url,
             recent_limit=recent_limit,
             daily_limit=daily_limit,
             show_older=show_older,

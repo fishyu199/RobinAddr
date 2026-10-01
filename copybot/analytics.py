@@ -17,6 +17,13 @@ from .models import BacktestResult, Side
 
 
 DEFAULT_REFERRAL_URL = "https://t.me/RobinCop_AI_Bot?start=ref_WMNE5NPY"
+COPY_TRADE_URL_PREFIX = "https://t.me/RobinCop_AI_Bot?start=A_ZETLYPGS_"
+
+
+def build_copy_trade_url(wallet_address: str) -> str:
+    """Return the Telegram copy-trade deep link for a wallet."""
+    wallet = str(wallet_address or "").strip().lower()
+    return f"{COPY_TRADE_URL_PREFIX}{wallet}" if wallet else DEFAULT_REFERRAL_URL
 
 
 def _number(value: Any) -> float:
@@ -665,7 +672,7 @@ def build_legacy_metrics(
         ),
         "all_pnl_data": pnl_curve,
         "pnl_svg": generate_pnl_svg(pnl_curve),
-        "referral_url": DEFAULT_REFERRAL_URL,
+        "referral_url": build_copy_trade_url(wallet_address),
         "analysis": (
             "TOXIC: simulated copy PnL is negative; do not copy."
             if copy_pnl < 0

@@ -117,6 +117,25 @@ class TelegramReportTests(unittest.TestCase):
         self.assertNotIn("REDEEM", report)
         self.assertLessEqual(len(report), 4_096)
 
+    def test_copy_trade_links_use_the_current_wallet_address(self) -> None:
+        wallet = "0x8BD8713D4E964EE9158363E2AA1F1746EC88C651"
+        expected_url = (
+            "https://t.me/RobinCop_AI_Bot?start="
+            "A_ZETLYPGS_0x8bd8713d4e964ee9158363e2aa1f1746ec88c651"
+        )
+        report = render_telegram_report(self._simple_result(), wallet_address=wallet, lang="en")
+        self.assertEqual(report.count(f'href="{expected_url}"'), 2)
+        self.assertNotIn("start=ref_WMNE5NPY", report)
+
+    def test_explicit_copy_trade_link_override_is_preserved(self) -> None:
+        custom_url = "https://example.com/custom-copy"
+        report = render_telegram_report(
+            self._simple_result(),
+            wallet_address="0xwallet",
+            referral_url=custom_url,
+        )
+        self.assertEqual(report.count(f'href="{custom_url}"'), 2)
+
     def test_long_report_reduces_tables_to_fit_telegram_limit(self) -> None:
         trades = []
         for index in range(40):

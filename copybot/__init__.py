@@ -1,7 +1,7 @@
 """Robinhood Chain copy-trading backtest engine."""
 
 from .backtest import CopyBacktester, run_backtest
-from .analytics import DEFAULT_REFERRAL_URL, build_legacy_metrics
+from .analytics import DEFAULT_REFERRAL_URL, build_copy_trade_url, build_legacy_metrics
 from .models import BacktestConfig, BacktestResult, Side, Trade
 from .telegram_report import SUPPORTED_LANGUAGES, render_telegram_report
 
@@ -14,6 +14,7 @@ __all__ = [
     "SUPPORTED_LANGUAGES",
     "Trade",
     "build_legacy_metrics",
+    "build_copy_trade_url",
     "run_backtest",
     "render_telegram_report",
 ]
