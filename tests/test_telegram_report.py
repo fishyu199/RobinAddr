@@ -139,10 +139,13 @@ class TelegramReportTests(unittest.TestCase):
 
     def test_recent_and_daily_tables_are_aligned_and_use_token_roi(self) -> None:
         report = render_telegram_report(self._simple_result(), wallet_address="0xwallet", lang="en")
-        self.assertIn("| Token / Date   |      PNL |     Copy |     Hold |", report)
-        self.assertIn("| TOK      11-14 |  +20.00% |  +14.15% |    1m ✅ |", report)
+        self.assertEqual(report.count("<pre><code>"), 3)
+        self.assertEqual(report.count("</code></pre>"), 3)
+        self.assertNotIn("|", report)
+        self.assertIn("Token / Date        PNL     Copy     Hold", report)
+        self.assertIn("TOK      11-14  +20.00%  +14.15%       1m", report)
         self.assertNotIn("Token        Target      Copy        Cost", report)
-        self.assertIn("| Date  |   Tx |  Volume |       PNL |      Copy |", report)
+        self.assertIn("Date    Tx  Volume       PNL      Copy", report)
 
     def test_stored_legacy_token_rows_can_render_roi_and_holding_time(self) -> None:
         result = self._simple_result()
@@ -154,7 +157,7 @@ class TelegramReportTests(unittest.TestCase):
             row.pop("holding_time_seconds", None)
             row.pop("is_closed", None)
         report = render_telegram_report(metrics=metrics, wallet_address="0xwallet", lang="en")
-        self.assertIn("| TOK      11-14 |  +20.00% |  +14.15% |    1m ✅ |", report)
+        self.assertIn("TOK      11-14  +20.00%  +14.15%       1m", report)
 
     def test_explicit_copy_trade_link_override_is_preserved(self) -> None:
         custom_url = "https://example.com/custom-copy"
@@ -195,6 +198,11 @@ class TelegramReportTests(unittest.TestCase):
             )
         report = render_telegram_report(run_backtest(trades), wallet_address="0xwallet")
         self.assertLessEqual(len(report), 4_096)
+        self.assertIn("LATEST 10", report)
+        self.assertIn("PREVIOUS 10 COPY ROI", report)
+        recent_section = report.split("LATEST 10", 1)[1].split("</code></pre>", 1)[0]
+        self.assertEqual(recent_section.count("TOKEN_3~"), 10)
+        self.assertEqual(len(recent_section.split("PREVIOUS 10 COPY ROI", 1)[1].strip().splitlines()), 2)
         self.assertTrue(report.endswith("</i>"))
 
 

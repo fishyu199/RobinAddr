@@ -318,7 +318,7 @@ def _build_report(
 
     def metric_line(key: str, value: str) -> str:
         label = _t(lang, key)
-        return f"{escape(_fit_display(label, 16))} | {escape(str(value))}"
+        return f"{escape(_fit_display(label, 16))} {escape(str(value))}"
 
     title = (
         f"💹 <b>{escape(_t(lang, 'title'))}:</b> <code>{wallet}</code>"
@@ -326,7 +326,12 @@ def _build_report(
         + f' / <a href="{referral}">⚡️ {escape(_t(lang, "copy_trade"))}</a>'
         + f' / <a href="{web_url}">🔗 View in Web</a>'
     )
-    lines = [title, "", f"📈 <b>{escape(_t(lang, 'score'))}: {metrics['score']}/100</b>", "<pre>"]
+    lines = [
+        title,
+        "",
+        f"📈 <b>{escape(_t(lang, 'score'))}: {metrics['score']}/100</b>",
+        "<pre><code>",
+    ]
     lines.extend(
         [
             metric_line("target_pnl", _money(target_pnl)),
@@ -362,42 +367,45 @@ def _build_report(
             metric_line("median_hold", _holding_time(metrics["median_holding_time_seconds"], lang=lang)),
             metric_line("last_active", str(metrics["last_active"] or "-")),
             "---------------------------------------",
-            "</pre>",
+            "</code></pre>",
         ]
     )
 
     recent_stats = metrics["recent_20_stats"]
+    recent = list(metrics["recent_20_tokens"])[:recent_limit]
     lines.extend(
         [
             f"<b>🕒 {escape(_t(lang, 'recent'))}</b>",
-            "<pre>",
-            f"{escape(_fit_display(_t(lang, 'target_pnl'), 12))} | {_money(recent_stats['actual_pnl'])}",
-            f"{escape(_fit_display(_t(lang, 'copy_pnl'), 12))} | {_money(recent_stats['copy_backtest_pnl'])}",
-            f"{escape(_fit_display(_t(lang, 'loss'), 12))} | {_percent(recent_stats['copy_loss_rate'])}",
-            f"{escape(_fit_display(_t(lang, 'win_rate'), 12))} | {recent_stats['win_rate']:.1f}%",
+            "<pre><code>",
+            f"{escape(_fit_display(_t(lang, 'target_pnl'), 12))} {_money(recent_stats['actual_pnl'])}",
+            f"{escape(_fit_display(_t(lang, 'copy_pnl'), 12))} {_money(recent_stats['copy_backtest_pnl'])}",
+            f"{escape(_fit_display(_t(lang, 'loss'), 12))} {_percent(recent_stats['copy_loss_rate'])}",
+            f"{escape(_fit_display(_t(lang, 'win_rate'), 12))} {recent_stats['win_rate']:.1f}%",
         ]
     )
     if recent_stats["actual_pnl"] <= 0:
         lines.append(
-            f"{escape(_fit_display(_t(lang, 'extra_loss'), 12))} | "
+            f"{escape(_fit_display(_t(lang, 'extra_loss'), 12))} "
             f"{_money(recent_stats['extra_loss_usd'], signed=False)}"
         )
     token_width, roi_width, hold_width = 14, 8, 8
     lines.extend(
         [
-            f"| {_fit_display('Token / Date', token_width)} | {_fit_display('PNL', roi_width, align='right')} | "
-            f"{_fit_display('Copy', roi_width, align='right')} | {_fit_display('Hold', hold_width, align='right')} |",
-            f"|{'-' * (token_width + 2)}|{'-' * (roi_width + 2)}|"
-            f"{'-' * (roi_width + 2)}|{'-' * (hold_width + 2)}|",
+            "",
+            "LATEST 10",
+            f"{_fit_display('Token / Date', token_width)} "
+            f"{_fit_display('PNL', roi_width, align='right')} "
+            f"{_fit_display('Copy', roi_width, align='right')} "
+            f"{_fit_display('Hold', hold_width, align='right')}",
+            f"{'-' * token_width} {'-' * roi_width} {'-' * roi_width} {'-' * hold_width}",
         ]
     )
-    recent = list(metrics["recent_20_tokens"])
     all_tokens = list(metrics.get("all_tokens") or metrics.get("all_markets") or [])
     stored_tokens = {
         str(row.get("token_address") or row.get("condition_id") or "").lower(): row
         for row in all_tokens
     }
-    for row in recent[:recent_limit]:
+    for row in recent[:10]:
         token_address = str(row.get("token_address") or "").lower()
         stored_token = stored_tokens.get(token_address, {})
         symbol = _fit_display(str(row.get("title") or token_address), 8, truncate=True)
@@ -425,39 +433,52 @@ def _build_report(
                 holding_time = last_active - first_buy
         target_roi = _roi_text(row.get("actual_pnl"), target_invested)
         copy_roi = _roi_text(row.get("bt_copy_pnl"), copy_invested)
-        icon = "✅" if float(row["bt_copy_pnl"]) >= 0 else "❌"
         hold = _compact_holding_time(holding_time, is_closed=is_closed)
         lines.append(
-            f"| {escape(label)} | {_fit_display(target_roi, roi_width, align='right')} | "
-            f"{_fit_display(copy_roi, roi_width, align='right')} | "
-            f"{_fit_display(f'{hold} {icon}', hold_width, align='right')} |"
+            f"{escape(label)} {_fit_display(target_roi, roi_width, align='right')} "
+            f"{_fit_display(copy_roi, roi_width, align='right')} "
+            f"{_fit_display(hold, hold_width, align='right')}"
         )
-    lines.append("</pre>")
+
+    previous_copy_rois = [
+        _roi_text(row.get("bt_copy_pnl"), row.get("copy_invested", row.get("invested")))
+        for row in recent[10:20]
+    ]
+    if previous_copy_rois:
+        lines.extend(["", f"PREVIOUS {len(previous_copy_rois)} COPY ROI"])
+        for index in range(0, len(previous_copy_rois), 5):
+            lines.append(
+                " ".join(
+                    _fit_display(value, roi_width, align="right")
+                    for value in previous_copy_rois[index : index + 5]
+                )
+            )
+    lines.append("</code></pre>")
 
     daily = list(metrics["daily_stats"])[:daily_limit]
     date_width, trades_width, volume_width, pnl_width = 5, 4, 7, 9
     lines.extend(
         [
             f"<b>📅 {escape(_t(lang, 'daily'))}</b>",
-            "<pre>",
-            f"| {_fit_display('Date', date_width)} | {_fit_display('Tx', trades_width, align='right')} | "
-            f"{_fit_display('Volume', volume_width, align='right')} | "
-            f"{_fit_display('PNL', pnl_width, align='right')} | {_fit_display('Copy', pnl_width, align='right')} |",
-            f"|{'-' * (date_width + 2)}|{'-' * (trades_width + 2)}|{'-' * (volume_width + 2)}|"
-            f"{'-' * (pnl_width + 2)}|{'-' * (pnl_width + 2)}|",
+            "<pre><code>",
+            f"{_fit_display('Date', date_width)} {_fit_display('Tx', trades_width, align='right')} "
+            f"{_fit_display('Volume', volume_width, align='right')} "
+            f"{_fit_display('PNL', pnl_width, align='right')} {_fit_display('Copy', pnl_width, align='right')}",
+            f"{'-' * date_width} {'-' * trades_width} {'-' * volume_width} "
+            f"{'-' * pnl_width} {'-' * pnl_width}",
         ]
     )
     for row in daily:
         volume = float(row["volume"])
         volume_text = _compact_money(volume, signed=False, decimals=0)
         lines.append(
-            f"| {_fit_display(row['date'][5:], date_width)} | "
-            f"{_fit_display(int(row['trades']), trades_width, align='right')} | "
-            f"{_fit_display(volume_text, volume_width, align='right')} | "
-            f"{_fit_display(_compact_money(row['actual_pnl']), pnl_width, align='right')} | "
-            f"{_fit_display(_compact_money(row['bt_copy_pnl']), pnl_width, align='right')} |"
+            f"{_fit_display(row['date'][5:], date_width)} "
+            f"{_fit_display(int(row['trades']), trades_width, align='right')} "
+            f"{_fit_display(volume_text, volume_width, align='right')} "
+            f"{_fit_display(_compact_money(row['actual_pnl']), pnl_width, align='right')} "
+            f"{_fit_display(_compact_money(row['bt_copy_pnl']), pnl_width, align='right')}"
         )
-    lines.append("</pre>")
+    lines.append("</code></pre>")
 
     if result.data_quality.get("starting_inventory_unknown"):
         lines.append(f"⚠️ {escape(_t(lang, 'warning'))}")
@@ -517,7 +538,18 @@ def render_telegram_report(
         assert result is not None
         metrics = build_legacy_metrics(result, wallet_address=wallet_address, profile=profile)
     resolved_referral_url = referral_url or build_copy_trade_url(wallet_address)
-    layouts = ((20, 14), (14, 10), (10, 7), (7, 5), (3, 3), (0, 0))
+    layouts = (
+        (20, 14),
+        (20, 10),
+        (20, 7),
+        (20, 5),
+        (20, 3),
+        (20, 0),
+        (15, 0),
+        (10, 0),
+        (5, 0),
+        (0, 0),
+    )
     for recent_limit, daily_limit in layouts:
         report = _build_report(
             context,

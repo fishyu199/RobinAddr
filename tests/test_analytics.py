@@ -88,9 +88,9 @@ class AnalyticsTests(unittest.TestCase):
         self.assertAlmostEqual(metrics["extra_loss_usd"], 4.75)
         self.assertEqual(metrics["score"], 0)
         report = render_telegram_report(result, metrics=metrics)
-        self.assertIn("跟单损耗         | N/A", report)
-        self.assertIn("利润保留率       | N/A", report)
-        self.assertIn("额外亏损金额     | $4.75", report)
+        self.assertIn("跟单损耗         N/A", report)
+        self.assertIn("利润保留率       N/A", report)
+        self.assertIn("额外亏损金额     $4.75", report)
 
     def test_legacy_and_robinhood_metrics_are_both_present(self) -> None:
         result = run_backtest(

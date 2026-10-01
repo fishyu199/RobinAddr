@@ -11,7 +11,7 @@ Usage:
 
 from __future__ import annotations
 
-__standalone_source_sha256__ = "eedfe6c6085ab5f0cfdceb8d1308b23f1dff87a110a5c92b3d4737500be903ce"
+__standalone_source_sha256__ = "fe5dc4f54ab25685ab3f60f2f802caed603fda210692edfec82581758e502844"
 
 
 # ===== BEGIN copybot/decimal_utils.py =====
@@ -1407,23 +1407,23 @@ def _build_report(result: BacktestResult | _StoredReportContext, metrics: Mappin
 
     def metric_line(key: str, value: str) -> str:
         label = _t(lang, key)
-        return f'{escape(_fit_display(label, 16))} | {escape(str(value))}'
+        return f'{escape(_fit_display(label, 16))} {escape(str(value))}'
     title = f"💹 <b>{escape(_t(lang, 'title'))}:</b> <code>{wallet}</code>" + (f' (<b>{identity}</b>)' if identity else '') + f''' / <a href="{referral}">⚡️ {escape(_t(lang, 'copy_trade'))}</a>''' + f' / <a href="{web_url}">🔗 View in Web</a>'
-    lines = [title, '', f"📈 <b>{escape(_t(lang, 'score'))}: {metrics['score']}/100</b>", '<pre>']
+    lines = [title, '', f"📈 <b>{escape(_t(lang, 'score'))}: {metrics['score']}/100</b>", '<pre><code>']
     lines.extend([metric_line('target_pnl', _money(target_pnl)), metric_line('copy_pnl', _money(copy_pnl)), metric_line('copy_loss', _percent(metrics['copy_loss_rate'])), metric_line('retention', _percent(metrics['pnl_retention_rate']))])
     if target_pnl <= 0:
         lines.append(metric_line('extra_loss', _money(metrics['extra_loss_usd'], signed=False)))
-    lines.extend([metric_line('last_2d', f"{metrics['last_2d_profit_share']:.2f}%"), metric_line('target_wr', f"{metrics['target_token_win_rate']:.2f}%"), metric_line('token_wr', f"{metrics['token_win_rate']:.2f}%"), metric_line('sell_wr', f"{metrics['sell_win_rate']:.2f}%"), metric_line('pl_ratio', f"{metrics['avg_profit_loss_ratio']:.2f}"), metric_line('trading_days', str(metrics['trading_days'])), metric_line('required_cash', _money(metrics['required_starting_cash_usd'], signed=False)), metric_line('cash_roi', _percent(metrics['copy_roi_on_required_cash'])), '---------------------------------------', metric_line('trades', str(metrics['processed_trade_count'])), metric_line('tokens', str(metrics['tokens_traded'])), metric_line('volume', _money(metrics['trading_volume'], signed=False)), metric_line('buys_sells', f"{metrics['buy_count']}/{metrics['sell_count']}"), metric_line('open_tokens', str(metrics['open_token_count'])), metric_line('winning_roi', f"{metrics['winning_token_roi']:.2f}%"), metric_line('avg_buy', f"${metrics['avg_buy_in_price']:.6f}"), metric_line('avg_sell', f"${metrics['avg_sell_price']:.6f}"), metric_line('avg_cost', _money(metrics['avg_invest_per_token'], signed=False)), metric_line('avg_target', _money(metrics['avg_pnl_per_token'])), metric_line('avg_copy', _money(metrics['avg_copy_pnl_per_token'])), metric_line('median_hold', _holding_time(metrics['median_holding_time_seconds'], lang=lang)), metric_line('last_active', str(metrics['last_active'] or '-')), '---------------------------------------', '</pre>'])
+    lines.extend([metric_line('last_2d', f"{metrics['last_2d_profit_share']:.2f}%"), metric_line('target_wr', f"{metrics['target_token_win_rate']:.2f}%"), metric_line('token_wr', f"{metrics['token_win_rate']:.2f}%"), metric_line('sell_wr', f"{metrics['sell_win_rate']:.2f}%"), metric_line('pl_ratio', f"{metrics['avg_profit_loss_ratio']:.2f}"), metric_line('trading_days', str(metrics['trading_days'])), metric_line('required_cash', _money(metrics['required_starting_cash_usd'], signed=False)), metric_line('cash_roi', _percent(metrics['copy_roi_on_required_cash'])), '---------------------------------------', metric_line('trades', str(metrics['processed_trade_count'])), metric_line('tokens', str(metrics['tokens_traded'])), metric_line('volume', _money(metrics['trading_volume'], signed=False)), metric_line('buys_sells', f"{metrics['buy_count']}/{metrics['sell_count']}"), metric_line('open_tokens', str(metrics['open_token_count'])), metric_line('winning_roi', f"{metrics['winning_token_roi']:.2f}%"), metric_line('avg_buy', f"${metrics['avg_buy_in_price']:.6f}"), metric_line('avg_sell', f"${metrics['avg_sell_price']:.6f}"), metric_line('avg_cost', _money(metrics['avg_invest_per_token'], signed=False)), metric_line('avg_target', _money(metrics['avg_pnl_per_token'])), metric_line('avg_copy', _money(metrics['avg_copy_pnl_per_token'])), metric_line('median_hold', _holding_time(metrics['median_holding_time_seconds'], lang=lang)), metric_line('last_active', str(metrics['last_active'] or '-')), '---------------------------------------', '</code></pre>'])
     recent_stats = metrics['recent_20_stats']
-    lines.extend([f"<b>🕒 {escape(_t(lang, 'recent'))}</b>", '<pre>', f"{escape(_fit_display(_t(lang, 'target_pnl'), 12))} | {_money(recent_stats['actual_pnl'])}", f"{escape(_fit_display(_t(lang, 'copy_pnl'), 12))} | {_money(recent_stats['copy_backtest_pnl'])}", f"{escape(_fit_display(_t(lang, 'loss'), 12))} | {_percent(recent_stats['copy_loss_rate'])}", f"{escape(_fit_display(_t(lang, 'win_rate'), 12))} | {recent_stats['win_rate']:.1f}%"])
+    recent = list(metrics['recent_20_tokens'])[:recent_limit]
+    lines.extend([f"<b>🕒 {escape(_t(lang, 'recent'))}</b>", '<pre><code>', f"{escape(_fit_display(_t(lang, 'target_pnl'), 12))} {_money(recent_stats['actual_pnl'])}", f"{escape(_fit_display(_t(lang, 'copy_pnl'), 12))} {_money(recent_stats['copy_backtest_pnl'])}", f"{escape(_fit_display(_t(lang, 'loss'), 12))} {_percent(recent_stats['copy_loss_rate'])}", f"{escape(_fit_display(_t(lang, 'win_rate'), 12))} {recent_stats['win_rate']:.1f}%"])
     if recent_stats['actual_pnl'] <= 0:
-        lines.append(f"{escape(_fit_display(_t(lang, 'extra_loss'), 12))} | {_money(recent_stats['extra_loss_usd'], signed=False)}")
+        lines.append(f"{escape(_fit_display(_t(lang, 'extra_loss'), 12))} {_money(recent_stats['extra_loss_usd'], signed=False)}")
     token_width, roi_width, hold_width = (14, 8, 8)
-    lines.extend([f"| {_fit_display('Token / Date', token_width)} | {_fit_display('PNL', roi_width, align='right')} | {_fit_display('Copy', roi_width, align='right')} | {_fit_display('Hold', hold_width, align='right')} |", f"|{'-' * (token_width + 2)}|{'-' * (roi_width + 2)}|{'-' * (roi_width + 2)}|{'-' * (hold_width + 2)}|"])
-    recent = list(metrics['recent_20_tokens'])
+    lines.extend(['', 'LATEST 10', f"{_fit_display('Token / Date', token_width)} {_fit_display('PNL', roi_width, align='right')} {_fit_display('Copy', roi_width, align='right')} {_fit_display('Hold', hold_width, align='right')}", f"{'-' * token_width} {'-' * roi_width} {'-' * roi_width} {'-' * hold_width}"])
     all_tokens = list(metrics.get('all_tokens') or metrics.get('all_markets') or [])
     stored_tokens = {str(row.get('token_address') or row.get('condition_id') or '').lower(): row for row in all_tokens}
-    for row in recent[:recent_limit]:
+    for row in recent[:10]:
         token_address = str(row.get('token_address') or '').lower()
         stored_token = stored_tokens.get(token_address, {})
         symbol = _fit_display(str(row.get('title') or token_address), 8, truncate=True)
@@ -1451,18 +1451,22 @@ def _build_report(result: BacktestResult | _StoredReportContext, metrics: Mappin
                 holding_time = last_active - first_buy
         target_roi = _roi_text(row.get('actual_pnl'), target_invested)
         copy_roi = _roi_text(row.get('bt_copy_pnl'), copy_invested)
-        icon = '✅' if float(row['bt_copy_pnl']) >= 0 else '❌'
         hold = _compact_holding_time(holding_time, is_closed=is_closed)
-        lines.append(f"| {escape(label)} | {_fit_display(target_roi, roi_width, align='right')} | {_fit_display(copy_roi, roi_width, align='right')} | {_fit_display(f'{hold} {icon}', hold_width, align='right')} |")
-    lines.append('</pre>')
+        lines.append(f"{escape(label)} {_fit_display(target_roi, roi_width, align='right')} {_fit_display(copy_roi, roi_width, align='right')} {_fit_display(hold, hold_width, align='right')}")
+    previous_copy_rois = [_roi_text(row.get('bt_copy_pnl'), row.get('copy_invested', row.get('invested'))) for row in recent[10:20]]
+    if previous_copy_rois:
+        lines.extend(['', f'PREVIOUS {len(previous_copy_rois)} COPY ROI'])
+        for index in range(0, len(previous_copy_rois), 5):
+            lines.append(' '.join((_fit_display(value, roi_width, align='right') for value in previous_copy_rois[index:index + 5])))
+    lines.append('</code></pre>')
     daily = list(metrics['daily_stats'])[:daily_limit]
     date_width, trades_width, volume_width, pnl_width = (5, 4, 7, 9)
-    lines.extend([f"<b>📅 {escape(_t(lang, 'daily'))}</b>", '<pre>', f"| {_fit_display('Date', date_width)} | {_fit_display('Tx', trades_width, align='right')} | {_fit_display('Volume', volume_width, align='right')} | {_fit_display('PNL', pnl_width, align='right')} | {_fit_display('Copy', pnl_width, align='right')} |", f"|{'-' * (date_width + 2)}|{'-' * (trades_width + 2)}|{'-' * (volume_width + 2)}|{'-' * (pnl_width + 2)}|{'-' * (pnl_width + 2)}|"])
+    lines.extend([f"<b>📅 {escape(_t(lang, 'daily'))}</b>", '<pre><code>', f"{_fit_display('Date', date_width)} {_fit_display('Tx', trades_width, align='right')} {_fit_display('Volume', volume_width, align='right')} {_fit_display('PNL', pnl_width, align='right')} {_fit_display('Copy', pnl_width, align='right')}", f"{'-' * date_width} {'-' * trades_width} {'-' * volume_width} {'-' * pnl_width} {'-' * pnl_width}"])
     for row in daily:
         volume = float(row['volume'])
         volume_text = _compact_money(volume, signed=False, decimals=0)
-        lines.append(f"| {_fit_display(row['date'][5:], date_width)} | {_fit_display(int(row['trades']), trades_width, align='right')} | {_fit_display(volume_text, volume_width, align='right')} | {_fit_display(_compact_money(row['actual_pnl']), pnl_width, align='right')} | {_fit_display(_compact_money(row['bt_copy_pnl']), pnl_width, align='right')} |")
-    lines.append('</pre>')
+        lines.append(f"{_fit_display(row['date'][5:], date_width)} {_fit_display(int(row['trades']), trades_width, align='right')} {_fit_display(volume_text, volume_width, align='right')} {_fit_display(_compact_money(row['actual_pnl']), pnl_width, align='right')} {_fit_display(_compact_money(row['bt_copy_pnl']), pnl_width, align='right')}")
+    lines.append('</code></pre>')
     if result.data_quality.get('starting_inventory_unknown'):
         lines.append(f"⚠️ {escape(_t(lang, 'warning'))}")
     buy_penalty = float(result.config.buy_price_penalty) * 100
@@ -1488,7 +1492,7 @@ def render_telegram_report(result: BacktestResult | None=None, *, wallet_address
         assert result is not None
         metrics = build_legacy_metrics(result, wallet_address=wallet_address, profile=profile)
     resolved_referral_url = referral_url or build_copy_trade_url(wallet_address)
-    layouts = ((20, 14), (14, 10), (10, 7), (7, 5), (3, 3), (0, 0))
+    layouts = ((20, 14), (20, 10), (20, 7), (20, 5), (20, 3), (20, 0), (15, 0), (10, 0), (5, 0), (0, 0))
     for recent_limit, daily_limit in layouts:
         report = _build_report(context, metrics, wallet_address=wallet_address, lang=lang, profile=profile, referral_url=resolved_referral_url, recent_limit=recent_limit, daily_limit=daily_limit)
         if len(report) <= max_length:
