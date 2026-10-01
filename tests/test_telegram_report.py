@@ -107,7 +107,7 @@ class TelegramReportTests(unittest.TestCase):
         )
         self.assertIn("目标地址 PnL", report)
         self.assertIn("平均目标PnL", report)
-        self.assertIn("代币平台分类", report)
+        self.assertNotIn("代币平台分类", report)
         self.assertIn("+$20.00", report)
         self.assertIn("+$14.50", report)
         self.assertIn("0xabc&lt;unsafe&gt;", report)
@@ -126,6 +126,16 @@ class TelegramReportTests(unittest.TestCase):
         report = render_telegram_report(self._simple_result(), wallet_address=wallet, lang="en")
         self.assertEqual(report.count(f'href="{expected_url}"'), 2)
         self.assertNotIn("start=ref_WMNE5NPY", report)
+        expected_web_url = (
+            "https://robincop.com/wallet/"
+            "0x8bd8713d4e964ee9158363e2aa1f1746ec88c651"
+        )
+        self.assertEqual(report.count(f'href="{expected_web_url}"'), 1)
+        self.assertIn(
+            f'>⚡️ Copy Trade</a> / <a href="{expected_web_url}">🔗 View in Web</a>',
+            report,
+        )
+        self.assertNotIn("Token Platform Categories", report)
 
     def test_explicit_copy_trade_link_override_is_preserved(self) -> None:
         custom_url = "https://example.com/custom-copy"

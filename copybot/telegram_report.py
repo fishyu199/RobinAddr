@@ -12,6 +12,7 @@ from .models import BacktestConfig, BacktestResult
 
 
 TELEGRAM_TEXT_LIMIT = 4_096
+PUBLIC_WALLET_URL_PREFIX = "https://robincop.com/wallet/"
 
 SUPPORTED_LANGUAGES = ("en", "zh-CN", "zh-TW", "ja", "ko", "ru", "fr", "ar", "pt", "es")
 
@@ -244,6 +245,10 @@ def _build_report(
     lang = normalize_language(lang)
     wallet = escape(wallet_address or "unknown")
     referral = escape(referral_url, quote=True)
+    web_url = escape(
+        f"{PUBLIC_WALLET_URL_PREFIX}{str(wallet_address or '').strip().lower()}",
+        quote=True,
+    )
     identity = _identity(profile)
     target_pnl = metrics["actual_pnl"]
     copy_pnl = metrics["copy_backtest_pnl"]
@@ -260,6 +265,7 @@ def _build_report(
         f"💹 <b>{escape(_t(lang, 'title'))}:</b> <code>{wallet}</code>"
         + (f" (<b>{identity}</b>)" if identity else "")
         + f' / <a href="{referral}">⚡️ {escape(_t(lang, "copy_trade"))}</a>'
+        + f' / <a href="{web_url}">🔗 View in Web</a>'
     )
     lines = [title, "", f"📈 <b>{escape(_t(lang, 'score'))}: {metrics['score']}/100</b>", "<pre>"]
     lines.extend(
@@ -300,32 +306,6 @@ def _build_report(
             "</pre>",
         ]
     )
-
-    categories = list((metrics.get("categories") or {}).items())
-    if categories:
-        lines.extend(
-            [
-                f"<b>📊 {escape(_t(lang, 'categories'))}</b>",
-                "<pre>",
-            ]
-        )
-        displayed_categories = categories[:7]
-        if len(categories) > 7:
-            displayed_categories.append(
-                (
-                    _t(lang, "other_platforms"),
-                    {
-                        "total": sum(int(stats.get("total") or 0) for _, stats in categories[7:]),
-                        "wins": sum(int(stats.get("wins") or 0) for _, stats in categories[7:]),
-                    },
-                )
-            )
-        for name, stats in displayed_categories:
-            total = int(stats.get("total") or 0)
-            wins = int(stats.get("wins") or 0)
-            win_rate = wins / total * 100 if total else 0.0
-            lines.append(f"• {escape(str(name))}: {total} ({win_rate:.0f}% WR)")
-        lines.append("</pre>")
 
     recent_stats = metrics["recent_20_stats"]
     lines.extend(
