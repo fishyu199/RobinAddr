@@ -137,6 +137,25 @@ class TelegramReportTests(unittest.TestCase):
         )
         self.assertNotIn("Token Platform Categories", report)
 
+    def test_recent_and_daily_tables_are_aligned_and_use_token_roi(self) -> None:
+        report = render_telegram_report(self._simple_result(), wallet_address="0xwallet", lang="en")
+        self.assertIn("| Token / Date   |      PNL |     Copy |     Hold |", report)
+        self.assertIn("| TOK      11-14 |  +20.00% |  +14.15% |    1m ✅ |", report)
+        self.assertNotIn("Token        Target      Copy        Cost", report)
+        self.assertIn("| Date  |   Tx |  Volume |       PNL |      Copy |", report)
+
+    def test_stored_legacy_token_rows_can_render_roi_and_holding_time(self) -> None:
+        result = self._simple_result()
+        metrics = result.to_dict()
+        metrics.update(build_legacy_metrics(result, include_all_tokens=True))
+        for row in metrics["recent_20_tokens"]:
+            row.pop("target_invested", None)
+            row.pop("copy_invested", None)
+            row.pop("holding_time_seconds", None)
+            row.pop("is_closed", None)
+        report = render_telegram_report(metrics=metrics, wallet_address="0xwallet", lang="en")
+        self.assertIn("| TOK      11-14 |  +20.00% |  +14.15% |    1m ✅ |", report)
+
     def test_explicit_copy_trade_link_override_is_preserved(self) -> None:
         custom_url = "https://example.com/custom-copy"
         report = render_telegram_report(

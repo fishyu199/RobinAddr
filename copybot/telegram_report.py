@@ -212,6 +212,70 @@ def _holding_time(seconds: Any, *, lang: str) -> str:
     return f"{value / 60:.1f} {_t(lang, 'mins')}"
 
 
+def _display_width(value: str) -> int:
+    width = 0
+    for character in value:
+        codepoint = ord(character)
+        if unicodedata.combining(character) or codepoint in {0x200D, 0xFE0F}:
+            continue
+        if unicodedata.east_asian_width(character) in {"W", "F"} or 0x1F000 <= codepoint <= 0x1FAFF:
+            width += 2
+        else:
+            width += 1
+    return width
+
+
+def _fit_display(value: Any, width: int, *, align: str = "left", truncate: bool = False) -> str:
+    text = str(value)
+    if truncate and _display_width(text) > width:
+        shortened = ""
+        for character in text:
+            if _display_width(shortened + character + "~") > width:
+                break
+            shortened += character
+        text = shortened + "~"
+    padding = max(0, width - _display_width(text))
+    return (" " * padding + text) if align == "right" else (text + " " * padding)
+
+
+def _compact_money(value: Any, *, signed: bool = True, decimals: int = 2) -> str:
+    number = float(value or 0)
+    prefix = "+" if signed and number >= 0 else ("-" if number < 0 else "")
+    amount = abs(number)
+    if amount >= 1_000_000:
+        return f"{prefix}${amount / 1_000_000:.1f}M"
+    if amount >= 1_000:
+        return f"{prefix}${amount / 1_000:.1f}K"
+    return f"{prefix}${amount:,.{decimals}f}"
+
+
+def _roi_text(pnl: Any, invested: Any) -> str:
+    cost = float(invested or 0)
+    if cost <= 0:
+        return "N/A"
+    roi = float(pnl or 0) / cost * 100
+    prefix = "+" if roi >= 0 else "-"
+    amount = abs(roi)
+    if amount >= 1_000:
+        return f"{prefix}{amount / 1_000:.1f}K%"
+    return f"{prefix}{amount:.2f}%"
+
+
+def _compact_holding_time(seconds: Any, *, is_closed: bool | None) -> str:
+    if is_closed is False:
+        return "Open"
+    if seconds is None:
+        return "N/A"
+    value = max(0, int(float(seconds)))
+    if value < 60:
+        return f"{value}s"
+    if value < 3_600:
+        return f"{value // 60}m"
+    if value < 86_400:
+        return f"{value // 3_600}h{(value % 3_600) // 60}m"
+    return f"{value // 86_400}d{(value % 86_400) // 3_600}h"
+
+
 def _identity(profile: Mapping[str, Any]) -> str:
     name = str(profile.get("name") or profile.get("twitter_name") or "")
     username = str(profile.get("twitter_username") or "")
@@ -240,7 +304,6 @@ def _build_report(
     referral_url: str,
     recent_limit: int,
     daily_limit: int,
-    show_older: bool,
 ) -> str:
     lang = normalize_language(lang)
     wallet = escape(wallet_address or "unknown")
@@ -255,11 +318,7 @@ def _build_report(
 
     def metric_line(key: str, value: str) -> str:
         label = _t(lang, key)
-        display_width = sum(
-            2 if unicodedata.east_asian_width(character) in {"W", "F"} else 1
-            for character in label
-        )
-        return label + (" " * max(1, 17 - display_width)) + value
+        return f"{escape(_fit_display(label, 16))} | {escape(str(value))}"
 
     title = (
         f"💹 <b>{escape(_t(lang, 'title'))}:</b> <code>{wallet}</code>"
@@ -288,7 +347,7 @@ def _build_report(
             metric_line("trading_days", str(metrics["trading_days"])),
             metric_line("required_cash", _money(metrics["required_starting_cash_usd"], signed=False)),
             metric_line("cash_roi", _percent(metrics["copy_roi_on_required_cash"])),
-            "----------------------------",
+            "---------------------------------------",
             metric_line("trades", str(metrics["processed_trade_count"])),
             metric_line("tokens", str(metrics["tokens_traded"])),
             metric_line("volume", _money(metrics["trading_volume"], signed=False)),
@@ -302,7 +361,7 @@ def _build_report(
             metric_line("avg_copy", _money(metrics["avg_copy_pnl_per_token"])),
             metric_line("median_hold", _holding_time(metrics["median_holding_time_seconds"], lang=lang)),
             metric_line("last_active", str(metrics["last_active"] or "-")),
-            "----------------------------",
+            "---------------------------------------",
             "</pre>",
         ]
     )
@@ -312,48 +371,91 @@ def _build_report(
         [
             f"<b>🕒 {escape(_t(lang, 'recent'))}</b>",
             "<pre>",
-            f"{_t(lang, 'target_pnl')} {_money(recent_stats['actual_pnl'])} | "
-            f"{_t(lang, 'copy_pnl')} {_money(recent_stats['copy_backtest_pnl'])}",
-            f"{_t(lang, 'loss')} {_percent(recent_stats['copy_loss_rate'])} | "
-            f"{_t(lang, 'win_rate')} {recent_stats['win_rate']:.1f}%",
+            f"{escape(_fit_display(_t(lang, 'target_pnl'), 12))} | {_money(recent_stats['actual_pnl'])}",
+            f"{escape(_fit_display(_t(lang, 'copy_pnl'), 12))} | {_money(recent_stats['copy_backtest_pnl'])}",
+            f"{escape(_fit_display(_t(lang, 'loss'), 12))} | {_percent(recent_stats['copy_loss_rate'])}",
+            f"{escape(_fit_display(_t(lang, 'win_rate'), 12))} | {recent_stats['win_rate']:.1f}%",
         ]
     )
     if recent_stats["actual_pnl"] <= 0:
-        lines.append(f"{_t(lang, 'extra_loss')} {_money(recent_stats['extra_loss_usd'], signed=False)}")
-    lines.extend([_t(lang, "token_table"), "----------------------------------------------"])
-    recent = list(metrics["recent_20_tokens"])
-    for row in recent[:recent_limit]:
-        symbol = escape(str(row.get("title") or row.get("token_address") or "")[:10])
-        time_str = escape(str(row.get("time_str") or "")[:5])
-        label = f"{symbol} {time_str}".strip()
-        icon = "✅" if float(row["bt_copy_pnl"]) >= 0 else "❌"
         lines.append(
-            f"{label:<15} {_money(row['actual_pnl']):>10} "
-            f"{_money(row['bt_copy_pnl']):>10} {icon} ${float(row['invested']):,.0f}"
+            f"{escape(_fit_display(_t(lang, 'extra_loss'), 12))} | "
+            f"{_money(recent_stats['extra_loss_usd'], signed=False)}"
+        )
+    token_width, roi_width, hold_width = 14, 8, 8
+    lines.extend(
+        [
+            f"| {_fit_display('Token / Date', token_width)} | {_fit_display('PNL', roi_width, align='right')} | "
+            f"{_fit_display('Copy', roi_width, align='right')} | {_fit_display('Hold', hold_width, align='right')} |",
+            f"|{'-' * (token_width + 2)}|{'-' * (roi_width + 2)}|"
+            f"{'-' * (roi_width + 2)}|{'-' * (hold_width + 2)}|",
+        ]
+    )
+    recent = list(metrics["recent_20_tokens"])
+    all_tokens = list(metrics.get("all_tokens") or metrics.get("all_markets") or [])
+    stored_tokens = {
+        str(row.get("token_address") or row.get("condition_id") or "").lower(): row
+        for row in all_tokens
+    }
+    for row in recent[:recent_limit]:
+        token_address = str(row.get("token_address") or "").lower()
+        stored_token = stored_tokens.get(token_address, {})
+        symbol = _fit_display(str(row.get("title") or token_address), 8, truncate=True)
+        time_str = str(row.get("time_str") or "")[:5].replace(".", "-")
+        label = f"{symbol} {_fit_display(time_str, 5)}"
+        copy_invested = row.get("copy_invested", row.get("invested"))
+        target_invested = row.get("target_invested")
+        if target_invested is None and copy_invested is not None:
+            config = metrics.get("config") or {}
+            buy_penalty = float(config.get("buy_price_penalty") or 0)
+            copy_fee_rate = float(config.get("copy_fee_rate") or 0)
+            fixed_cost = float(config.get("copy_fixed_cost_usd") or 0)
+            inferred_cost = float(copy_invested) - fixed_cost * int(row.get("buy_count") or 0)
+            divisor = (1 + buy_penalty) * (1 + copy_fee_rate)
+            if inferred_cost > 0 and divisor > 0:
+                target_invested = inferred_cost / divisor
+        if target_invested is None:
+            target_invested = stored_token.get("invested")
+        is_closed = row.get("is_closed", stored_token.get("is_closed"))
+        holding_time = row.get("holding_time_seconds")
+        if holding_time is None and is_closed is True:
+            first_buy = float(stored_token.get("first_buy_time") or 0)
+            last_active = float(stored_token.get("last_active") or 0)
+            if first_buy and last_active >= first_buy:
+                holding_time = last_active - first_buy
+        target_roi = _roi_text(row.get("actual_pnl"), target_invested)
+        copy_roi = _roi_text(row.get("bt_copy_pnl"), copy_invested)
+        icon = "✅" if float(row["bt_copy_pnl"]) >= 0 else "❌"
+        hold = _compact_holding_time(holding_time, is_closed=is_closed)
+        lines.append(
+            f"| {escape(label)} | {_fit_display(target_roi, roi_width, align='right')} | "
+            f"{_fit_display(copy_roi, roi_width, align='right')} | "
+            f"{_fit_display(f'{hold} {icon}', hold_width, align='right')} |"
         )
     lines.append("</pre>")
-    if show_older and len(recent) > recent_limit:
-        older = " | ".join(
-            f"{escape(str(row.get('title') or '')[:6])} {_money(row['bt_copy_pnl'])}"
-            for row in recent[recent_limit:]
-        )
-        lines.extend(["<pre>", _t(lang, "older") + older, "</pre>"])
 
     daily = list(metrics["daily_stats"])[:daily_limit]
+    date_width, trades_width, volume_width, pnl_width = 5, 4, 7, 9
     lines.extend(
         [
             f"<b>📅 {escape(_t(lang, 'daily'))}</b>",
             "<pre>",
-            _t(lang, "daily_table"),
-            "---------------------------------------",
+            f"| {_fit_display('Date', date_width)} | {_fit_display('Tx', trades_width, align='right')} | "
+            f"{_fit_display('Volume', volume_width, align='right')} | "
+            f"{_fit_display('PNL', pnl_width, align='right')} | {_fit_display('Copy', pnl_width, align='right')} |",
+            f"|{'-' * (date_width + 2)}|{'-' * (trades_width + 2)}|{'-' * (volume_width + 2)}|"
+            f"{'-' * (pnl_width + 2)}|{'-' * (pnl_width + 2)}|",
         ]
     )
     for row in daily:
         volume = float(row["volume"])
-        volume_text = f"${volume / 1000:.1f}k" if volume >= 1000 else f"${volume:.0f}"
+        volume_text = _compact_money(volume, signed=False, decimals=0)
         lines.append(
-            f"{row['date'][5:]} {int(row['trades']):>6} {volume_text:>7} "
-            f"{_money(row['actual_pnl']):>9} {_money(row['bt_copy_pnl']):>9}"
+            f"| {_fit_display(row['date'][5:], date_width)} | "
+            f"{_fit_display(int(row['trades']), trades_width, align='right')} | "
+            f"{_fit_display(volume_text, volume_width, align='right')} | "
+            f"{_fit_display(_compact_money(row['actual_pnl']), pnl_width, align='right')} | "
+            f"{_fit_display(_compact_money(row['bt_copy_pnl']), pnl_width, align='right')} |"
         )
     lines.append("</pre>")
 
@@ -415,8 +517,8 @@ def render_telegram_report(
         assert result is not None
         metrics = build_legacy_metrics(result, wallet_address=wallet_address, profile=profile)
     resolved_referral_url = referral_url or build_copy_trade_url(wallet_address)
-    layouts = ((7, 14, True), (7, 7, False), (5, 5, False), (3, 3, False), (0, 0, False))
-    for recent_limit, daily_limit, show_older in layouts:
+    layouts = ((20, 14), (14, 10), (10, 7), (7, 5), (3, 3), (0, 0))
+    for recent_limit, daily_limit in layouts:
         report = _build_report(
             context,
             metrics,
@@ -426,7 +528,6 @@ def render_telegram_report(
             referral_url=resolved_referral_url,
             recent_limit=recent_limit,
             daily_limit=daily_limit,
-            show_older=show_older,
         )
         if len(report) <= max_length:
             return report

@@ -123,8 +123,10 @@ def _simulate_rows(
     stats: dict[str, dict[str, Any]] = defaultdict(
         lambda: {
             "symbol": "",
+            "first_buy_time_ms": 0,
             "last_timestamp_ms": 0,
             "last_buy_time_ms": 0,
+            "last_sell_time_ms": 0,
             "buy_quantity": Decimal("0"),
             "buy_notional": Decimal("0"),
             "sell_quantity": Decimal("0"),
@@ -149,6 +151,8 @@ def _simulate_rows(
         timestamp_ms = int(row["timestamp_ms"])
         item["last_timestamp_ms"] = max(item["last_timestamp_ms"], timestamp_ms)
         if side is Side.BUY:
+            if not item["first_buy_time_ms"]:
+                item["first_buy_time_ms"] = timestamp_ms
             target_execution = target_ledgers[address].buy(requested, target_price, target_fee)
             copy_execution = copy_ledgers[address].buy(requested, copy_price, copy_fee)
             item["last_buy_time_ms"] = max(item["last_buy_time_ms"], timestamp_ms)
@@ -156,6 +160,7 @@ def _simulate_rows(
             item["buy_notional"] += target_execution.gross_notional_usd
             item["buy_count"] += 1
         else:
+            item["last_sell_time_ms"] = max(item["last_sell_time_ms"], timestamp_ms)
             target_execution = target_ledgers[address].sell(requested, target_price, exact_fee_usd=target_fee)
             copy_execution = copy_ledgers[address].sell(requested, copy_price, exact_fee_usd=copy_fee)
             item["sell_quantity"] += target_execution.executed_quantity
@@ -188,7 +193,9 @@ def _simulate_rows(
                 float(item["sell_notional"] / item["sell_quantity"]) if item["sell_quantity"] else 0.0
             ),
             "last_timestamp_ms": item["last_timestamp_ms"],
+            "first_buy_time_ms": item["first_buy_time_ms"],
             "last_buy_time_ms": item["last_buy_time_ms"],
+            "last_sell_time_ms": item["last_sell_time_ms"],
             "is_closed": target_ledgers[address].quantity <= ZERO,
         }
     return simulated
@@ -594,6 +601,16 @@ def build_legacy_metrics(
             "actual_pnl": token["actual_pnl"],
             "bt_copy_pnl": token["copy_backtest_pnl"],
             "invested": token["copy_invested"],
+            "target_invested": token["invested"],
+            "copy_invested": token["copy_invested"],
+            "holding_time_seconds": (
+                (token["last_sell_time_ms"] - token["first_buy_time_ms"]) / 1000
+                if token["is_closed"]
+                and token["first_buy_time_ms"]
+                and token["last_sell_time_ms"] >= token["first_buy_time_ms"]
+                else None
+            ),
+            "is_closed": token["is_closed"],
             "buy_count": token["buy_count"],
             "avg_buy_price": token["avg_buy_price"],
             "avg_sell_price": token["avg_sell_price"],

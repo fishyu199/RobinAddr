@@ -11,7 +11,7 @@ Usage:
 
 from __future__ import annotations
 
-__standalone_source_sha256__ = "5edcf1dbfe7348cb013d18367a7a9f17e87db7f04e784fa392364abe3c72e69a"
+__standalone_source_sha256__ = "eedfe6c6085ab5f0cfdceb8d1308b23f1dff87a110a5c92b3d4737500be903ce"
 
 
 # ===== BEGIN copybot/decimal_utils.py =====
@@ -982,7 +982,7 @@ def _token_rows(result: BacktestResult) -> list[dict[str, Any]]:
 def _simulate_rows(result: BacktestResult, rows: Iterable[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
     target_ledgers: dict[str, PositionLedger] = defaultdict(PositionLedger)
     copy_ledgers: dict[str, PositionLedger] = defaultdict(PositionLedger)
-    stats: dict[str, dict[str, Any]] = defaultdict(lambda: {'symbol': '', 'last_timestamp_ms': 0, 'last_buy_time_ms': 0, 'buy_quantity': Decimal('0'), 'buy_notional': Decimal('0'), 'sell_quantity': Decimal('0'), 'sell_notional': Decimal('0'), 'buy_count': 0, 'launchpad_platform': ''})
+    stats: dict[str, dict[str, Any]] = defaultdict(lambda: {'symbol': '', 'first_buy_time_ms': 0, 'last_timestamp_ms': 0, 'last_buy_time_ms': 0, 'last_sell_time_ms': 0, 'buy_quantity': Decimal('0'), 'buy_notional': Decimal('0'), 'sell_quantity': Decimal('0'), 'sell_notional': Decimal('0'), 'buy_count': 0, 'launchpad_platform': ''})
     for row in rows:
         address = str(row['token_address'])
         side = Side.parse(row.get('side'))
@@ -999,6 +999,8 @@ def _simulate_rows(result: BacktestResult, rows: Iterable[Mapping[str, Any]]) ->
         timestamp_ms = int(row['timestamp_ms'])
         item['last_timestamp_ms'] = max(item['last_timestamp_ms'], timestamp_ms)
         if side is Side.BUY:
+            if not item['first_buy_time_ms']:
+                item['first_buy_time_ms'] = timestamp_ms
             target_execution = target_ledgers[address].buy(requested, target_price, target_fee)
             copy_execution = copy_ledgers[address].buy(requested, copy_price, copy_fee)
             item['last_buy_time_ms'] = max(item['last_buy_time_ms'], timestamp_ms)
@@ -1006,6 +1008,7 @@ def _simulate_rows(result: BacktestResult, rows: Iterable[Mapping[str, Any]]) ->
             item['buy_notional'] += target_execution.gross_notional_usd
             item['buy_count'] += 1
         else:
+            item['last_sell_time_ms'] = max(item['last_sell_time_ms'], timestamp_ms)
             target_execution = target_ledgers[address].sell(requested, target_price, exact_fee_usd=target_fee)
             copy_execution = copy_ledgers[address].sell(requested, copy_price, exact_fee_usd=copy_fee)
             item['sell_quantity'] += target_execution.executed_quantity
@@ -1019,7 +1022,7 @@ def _simulate_rows(result: BacktestResult, rows: Iterable[Mapping[str, Any]]) ->
         target = target_ledgers[address].summary(target_mark)
         copy = copy_ledgers[address].summary(copy_mark)
         item = stats[address]
-        simulated[address] = {'token_address': address, 'token_symbol': item['symbol'], 'launchpad_platform': item['launchpad_platform'] or 'Other', 'actual_pnl': float(target.total_pnl_usd), 'copy_backtest_pnl': float(copy.total_pnl_usd), 'invested': float(target.gross_buy_usd), 'copy_invested': float(copy.gross_buy_usd + copy.fees_usd), 'buy_count': item['buy_count'], 'avg_buy_price': float(item['buy_notional'] / item['buy_quantity']) if item['buy_quantity'] else 0.0, 'avg_sell_price': float(item['sell_notional'] / item['sell_quantity']) if item['sell_quantity'] else 0.0, 'last_timestamp_ms': item['last_timestamp_ms'], 'last_buy_time_ms': item['last_buy_time_ms'], 'is_closed': target_ledgers[address].quantity <= ZERO}
+        simulated[address] = {'token_address': address, 'token_symbol': item['symbol'], 'launchpad_platform': item['launchpad_platform'] or 'Other', 'actual_pnl': float(target.total_pnl_usd), 'copy_backtest_pnl': float(copy.total_pnl_usd), 'invested': float(target.gross_buy_usd), 'copy_invested': float(copy.gross_buy_usd + copy.fees_usd), 'buy_count': item['buy_count'], 'avg_buy_price': float(item['buy_notional'] / item['buy_quantity']) if item['buy_quantity'] else 0.0, 'avg_sell_price': float(item['sell_notional'] / item['sell_quantity']) if item['sell_quantity'] else 0.0, 'last_timestamp_ms': item['last_timestamp_ms'], 'first_buy_time_ms': item['first_buy_time_ms'], 'last_buy_time_ms': item['last_buy_time_ms'], 'last_sell_time_ms': item['last_sell_time_ms'], 'is_closed': target_ledgers[address].quantity <= ZERO}
     return simulated
 
 def _recent_20(result: BacktestResult) -> list[dict[str, Any]]:
@@ -1277,7 +1280,7 @@ def build_legacy_metrics(result: BacktestResult, *, wallet_address: str='', prof
             category['wins'] += 1
     platform_categories = dict(sorted(platform_categories.items(), key=lambda item: item[1]['total'], reverse=True))
     all_tokens = [{'condition_id': token['token_address'], 'token_address': token['token_address'], 'title': token['token_symbol'], 'symbol': token['token_symbol'], 'launchpad_platform': token['launchpad_platform'], 'actual_pnl': token['actual_pnl'], 'bt_copy_pnl': token['copy_backtest_pnl'], 'invested': token['invested'], 'avg_buy_price': token['avg_buy_price'], 'avg_sell_price': token['avg_sell_price'], 'closed_size': token['sold_quantity'], 'first_buy_time': token['first_buy_time_ms'] / 1000 if token['first_buy_time_ms'] else 0, 'last_active': token['last_timestamp_ms'] / 1000 if token['last_timestamp_ms'] else 0, 'is_closed': token['is_closed']} for token in sorted(tokens, key=lambda item: item['first_buy_time_ms'] or item['last_timestamp_ms'], reverse=True)]
-    recent_list = [{'title': token['token_symbol'], 'token_address': token['token_address'], 'launchpad_platform': token['launchpad_platform'], 'time_str': datetime.fromtimestamp(token['last_buy_time_ms'] / 1000, timezone.utc).strftime('%m.%d %H:%M') if token['last_buy_time_ms'] else '', 'actual_pnl': token['actual_pnl'], 'bt_copy_pnl': token['copy_backtest_pnl'], 'invested': token['copy_invested'], 'buy_count': token['buy_count'], 'avg_buy_price': token['avg_buy_price'], 'avg_sell_price': token['avg_sell_price'], 'win': token['copy_backtest_pnl'] >= 0} for token in recent]
+    recent_list = [{'title': token['token_symbol'], 'token_address': token['token_address'], 'launchpad_platform': token['launchpad_platform'], 'time_str': datetime.fromtimestamp(token['last_buy_time_ms'] / 1000, timezone.utc).strftime('%m.%d %H:%M') if token['last_buy_time_ms'] else '', 'actual_pnl': token['actual_pnl'], 'bt_copy_pnl': token['copy_backtest_pnl'], 'invested': token['copy_invested'], 'target_invested': token['invested'], 'copy_invested': token['copy_invested'], 'holding_time_seconds': (token['last_sell_time_ms'] - token['first_buy_time_ms']) / 1000 if token['is_closed'] and token['first_buy_time_ms'] and (token['last_sell_time_ms'] >= token['first_buy_time_ms']) else None, 'is_closed': token['is_closed'], 'buy_count': token['buy_count'], 'avg_buy_price': token['avg_buy_price'], 'avg_sell_price': token['avg_sell_price'], 'win': token['copy_backtest_pnl'] >= 0} for token in recent]
     metrics: dict[str, Any] = {'wallet_address': wallet_address, 'profileImage': str(profile.get('avatar') or profile.get('profile_image') or ''), 'xUsername': str(profile.get('twitter_username') or ''), 'score': score, 'actual_pnl': target_pnl, 'copy_backtest_pnl': copy_pnl, 'copy_loss_rate': loss_rate, 'pnl_retention_rate': retention, 'extra_loss_usd': extra_loss, 'last_2d_profit_share': last_two_day_share, 'last_2d_copy_pnl': last_two_day_pnl, 'win_rate': win_rate, 'target_token_win_rate': win_rate, 'token_win_rate': copy_token_win_rate, 'sell_win_rate': sell_win_rate, 'avg_profit_loss_ratio': profit_loss_ratio, 'markets_traded': len(tokens), 'tokens_traded': len(tokens), 'trading_volume': total_volume, 'winning_market_roi': winning_roi, 'winning_token_roi': winning_roi, 'avg_buy_in_price': sum(avg_buy_prices) / len(avg_buy_prices) if avg_buy_prices else 0.0, 'avg_sell_price': sum(avg_sell_prices) / len(avg_sell_prices) if avg_sell_prices else 0.0, 'avg_invest_per_market': avg_invest, 'avg_invest_per_token': avg_invest, 'avg_pnl_per_market': avg_target_pnl, 'avg_pnl_per_token': avg_target_pnl, 'avg_copy_pnl_per_token': avg_copy_pnl, 'median_holding_time_seconds': median_holding, 'categories': platform_categories, 'category_dimension': 'launchpad_platform', 'recent_20_stats': {'actual_pnl': recent_target, 'copy_backtest_pnl': recent_copy, 'copy_loss_rate': recent_loss_rate, 'extra_loss_usd': recent_extra_loss, 'win_rate': recent_win_rate, 'last_active': datetime.fromtimestamp(last_active_ms / 1000, timezone.utc).strftime('%Y-%m-%d %H:%M') if last_active_ms else ''}, 'recent_20_markets': recent_list, 'recent_20_tokens': recent_list, 'daily_stats': daily, 'daily_equity_pnl_14d': daily_equity_14d, 'target_daily_pnl_14d': [{'date': item['date'], 'pnl': item['actual_pnl']} for item in daily_equity_14d], 'copy_daily_pnl_14d': [{'date': item['date'], 'pnl': item['copy_pnl']} for item in daily_equity_14d], 'trading_days': len(daily), 'required_starting_cash_usd': float(result.copy.required_starting_cash_usd), 'copy_roi_on_required_cash': float(result.copy.roi_on_required_cash) * 100 if result.copy.roi_on_required_cash is not None else None, 'processed_trade_count': result.processed_trade_count, 'buy_count': result.target.buy_count, 'sell_count': result.target.sell_count, 'open_token_count': result.copy.open_position_count, 'last_active': datetime.fromtimestamp(last_active_ms / 1000, timezone.utc).strftime('%Y-%m-%d %H:%M UTC') if last_active_ms else '', 'all_pnl_data': pnl_curve, 'pnl_svg': generate_pnl_svg(pnl_curve), 'referral_url': build_copy_trade_url(wallet_address), 'analysis': 'TOXIC: simulated copy PnL is negative; do not copy.' if copy_pnl < 0 else 'Recent copy PnL is negative; current trades require caution.' if recent_copy < 0 else 'Lifetime and recent copy results are positive.', 'score_inputs': {'profitable_days_14d': profitable_days_14d, 'loss_days_14d': loss_days_14d, 'total_pnl_14d': total_pnl_14d, 'pnl_ratio_14d': pnl_ratio_14d, 'days_since_active': days_since_active if math.isfinite(days_since_active) else None, 'median_holding_time_seconds': median_holding if holding_times else None}, 'metric_semantics': {'market_alias': 'market fields are retained for website compatibility and mean spot token', 'copy_loss_rate': 'N/A when target PnL is non-positive; use extra_loss_usd instead', 'daily_pnl': "token PnL attributed to the UTC date of the token's last activity", 'daily_equity_pnl_14d': 'UTC calendar-day deltas from event-time mark-to-market equity; missing days are zero'}}
     if include_all_tokens:
         metrics['all_markets'] = all_tokens
@@ -1318,6 +1321,65 @@ def _holding_time(seconds: Any, *, lang: str) -> str:
         return f"{value / 3600:.1f} {_t(lang, 'hours')}"
     return f"{value / 60:.1f} {_t(lang, 'mins')}"
 
+def _display_width(value: str) -> int:
+    width = 0
+    for character in value:
+        codepoint = ord(character)
+        if unicodedata.combining(character) or codepoint in {8205, 65039}:
+            continue
+        if unicodedata.east_asian_width(character) in {'W', 'F'} or 126976 <= codepoint <= 129791:
+            width += 2
+        else:
+            width += 1
+    return width
+
+def _fit_display(value: Any, width: int, *, align: str='left', truncate: bool=False) -> str:
+    text = str(value)
+    if truncate and _display_width(text) > width:
+        shortened = ''
+        for character in text:
+            if _display_width(shortened + character + '~') > width:
+                break
+            shortened += character
+        text = shortened + '~'
+    padding = max(0, width - _display_width(text))
+    return ' ' * padding + text if align == 'right' else text + ' ' * padding
+
+def _compact_money(value: Any, *, signed: bool=True, decimals: int=2) -> str:
+    number = float(value or 0)
+    prefix = '+' if signed and number >= 0 else '-' if number < 0 else ''
+    amount = abs(number)
+    if amount >= 1000000:
+        return f'{prefix}${amount / 1000000:.1f}M'
+    if amount >= 1000:
+        return f'{prefix}${amount / 1000:.1f}K'
+    return f'{prefix}${amount:,.{decimals}f}'
+
+def _roi_text(pnl: Any, invested: Any) -> str:
+    cost = float(invested or 0)
+    if cost <= 0:
+        return 'N/A'
+    roi = float(pnl or 0) / cost * 100
+    prefix = '+' if roi >= 0 else '-'
+    amount = abs(roi)
+    if amount >= 1000:
+        return f'{prefix}{amount / 1000:.1f}K%'
+    return f'{prefix}{amount:.2f}%'
+
+def _compact_holding_time(seconds: Any, *, is_closed: bool | None) -> str:
+    if is_closed is False:
+        return 'Open'
+    if seconds is None:
+        return 'N/A'
+    value = max(0, int(float(seconds)))
+    if value < 60:
+        return f'{value}s'
+    if value < 3600:
+        return f'{value // 60}m'
+    if value < 86400:
+        return f'{value // 3600}h{value % 3600 // 60}m'
+    return f'{value // 86400}d{value % 86400 // 3600}h'
+
 def _identity(profile: Mapping[str, Any]) -> str:
     name = str(profile.get('name') or profile.get('twitter_name') or '')
     username = str(profile.get('twitter_username') or '')
@@ -1334,7 +1396,7 @@ class _StoredReportContext:
     data_quality: Mapping[str, Any]
     processed_trade_count: int
 
-def _build_report(result: BacktestResult | _StoredReportContext, metrics: Mapping[str, Any], *, wallet_address: str, lang: str, profile: Mapping[str, Any], referral_url: str, recent_limit: int, daily_limit: int, show_older: bool) -> str:
+def _build_report(result: BacktestResult | _StoredReportContext, metrics: Mapping[str, Any], *, wallet_address: str, lang: str, profile: Mapping[str, Any], referral_url: str, recent_limit: int, daily_limit: int) -> str:
     lang = normalize_language(lang)
     wallet = escape(wallet_address or 'unknown')
     referral = escape(referral_url, quote=True)
@@ -1345,36 +1407,61 @@ def _build_report(result: BacktestResult | _StoredReportContext, metrics: Mappin
 
     def metric_line(key: str, value: str) -> str:
         label = _t(lang, key)
-        display_width = sum((2 if unicodedata.east_asian_width(character) in {'W', 'F'} else 1 for character in label))
-        return label + ' ' * max(1, 17 - display_width) + value
+        return f'{escape(_fit_display(label, 16))} | {escape(str(value))}'
     title = f"💹 <b>{escape(_t(lang, 'title'))}:</b> <code>{wallet}</code>" + (f' (<b>{identity}</b>)' if identity else '') + f''' / <a href="{referral}">⚡️ {escape(_t(lang, 'copy_trade'))}</a>''' + f' / <a href="{web_url}">🔗 View in Web</a>'
     lines = [title, '', f"📈 <b>{escape(_t(lang, 'score'))}: {metrics['score']}/100</b>", '<pre>']
     lines.extend([metric_line('target_pnl', _money(target_pnl)), metric_line('copy_pnl', _money(copy_pnl)), metric_line('copy_loss', _percent(metrics['copy_loss_rate'])), metric_line('retention', _percent(metrics['pnl_retention_rate']))])
     if target_pnl <= 0:
         lines.append(metric_line('extra_loss', _money(metrics['extra_loss_usd'], signed=False)))
-    lines.extend([metric_line('last_2d', f"{metrics['last_2d_profit_share']:.2f}%"), metric_line('target_wr', f"{metrics['target_token_win_rate']:.2f}%"), metric_line('token_wr', f"{metrics['token_win_rate']:.2f}%"), metric_line('sell_wr', f"{metrics['sell_win_rate']:.2f}%"), metric_line('pl_ratio', f"{metrics['avg_profit_loss_ratio']:.2f}"), metric_line('trading_days', str(metrics['trading_days'])), metric_line('required_cash', _money(metrics['required_starting_cash_usd'], signed=False)), metric_line('cash_roi', _percent(metrics['copy_roi_on_required_cash'])), '----------------------------', metric_line('trades', str(metrics['processed_trade_count'])), metric_line('tokens', str(metrics['tokens_traded'])), metric_line('volume', _money(metrics['trading_volume'], signed=False)), metric_line('buys_sells', f"{metrics['buy_count']}/{metrics['sell_count']}"), metric_line('open_tokens', str(metrics['open_token_count'])), metric_line('winning_roi', f"{metrics['winning_token_roi']:.2f}%"), metric_line('avg_buy', f"${metrics['avg_buy_in_price']:.6f}"), metric_line('avg_sell', f"${metrics['avg_sell_price']:.6f}"), metric_line('avg_cost', _money(metrics['avg_invest_per_token'], signed=False)), metric_line('avg_target', _money(metrics['avg_pnl_per_token'])), metric_line('avg_copy', _money(metrics['avg_copy_pnl_per_token'])), metric_line('median_hold', _holding_time(metrics['median_holding_time_seconds'], lang=lang)), metric_line('last_active', str(metrics['last_active'] or '-')), '----------------------------', '</pre>'])
+    lines.extend([metric_line('last_2d', f"{metrics['last_2d_profit_share']:.2f}%"), metric_line('target_wr', f"{metrics['target_token_win_rate']:.2f}%"), metric_line('token_wr', f"{metrics['token_win_rate']:.2f}%"), metric_line('sell_wr', f"{metrics['sell_win_rate']:.2f}%"), metric_line('pl_ratio', f"{metrics['avg_profit_loss_ratio']:.2f}"), metric_line('trading_days', str(metrics['trading_days'])), metric_line('required_cash', _money(metrics['required_starting_cash_usd'], signed=False)), metric_line('cash_roi', _percent(metrics['copy_roi_on_required_cash'])), '---------------------------------------', metric_line('trades', str(metrics['processed_trade_count'])), metric_line('tokens', str(metrics['tokens_traded'])), metric_line('volume', _money(metrics['trading_volume'], signed=False)), metric_line('buys_sells', f"{metrics['buy_count']}/{metrics['sell_count']}"), metric_line('open_tokens', str(metrics['open_token_count'])), metric_line('winning_roi', f"{metrics['winning_token_roi']:.2f}%"), metric_line('avg_buy', f"${metrics['avg_buy_in_price']:.6f}"), metric_line('avg_sell', f"${metrics['avg_sell_price']:.6f}"), metric_line('avg_cost', _money(metrics['avg_invest_per_token'], signed=False)), metric_line('avg_target', _money(metrics['avg_pnl_per_token'])), metric_line('avg_copy', _money(metrics['avg_copy_pnl_per_token'])), metric_line('median_hold', _holding_time(metrics['median_holding_time_seconds'], lang=lang)), metric_line('last_active', str(metrics['last_active'] or '-')), '---------------------------------------', '</pre>'])
     recent_stats = metrics['recent_20_stats']
-    lines.extend([f"<b>🕒 {escape(_t(lang, 'recent'))}</b>", '<pre>', f"{_t(lang, 'target_pnl')} {_money(recent_stats['actual_pnl'])} | {_t(lang, 'copy_pnl')} {_money(recent_stats['copy_backtest_pnl'])}", f"{_t(lang, 'loss')} {_percent(recent_stats['copy_loss_rate'])} | {_t(lang, 'win_rate')} {recent_stats['win_rate']:.1f}%"])
+    lines.extend([f"<b>🕒 {escape(_t(lang, 'recent'))}</b>", '<pre>', f"{escape(_fit_display(_t(lang, 'target_pnl'), 12))} | {_money(recent_stats['actual_pnl'])}", f"{escape(_fit_display(_t(lang, 'copy_pnl'), 12))} | {_money(recent_stats['copy_backtest_pnl'])}", f"{escape(_fit_display(_t(lang, 'loss'), 12))} | {_percent(recent_stats['copy_loss_rate'])}", f"{escape(_fit_display(_t(lang, 'win_rate'), 12))} | {recent_stats['win_rate']:.1f}%"])
     if recent_stats['actual_pnl'] <= 0:
-        lines.append(f"{_t(lang, 'extra_loss')} {_money(recent_stats['extra_loss_usd'], signed=False)}")
-    lines.extend([_t(lang, 'token_table'), '----------------------------------------------'])
+        lines.append(f"{escape(_fit_display(_t(lang, 'extra_loss'), 12))} | {_money(recent_stats['extra_loss_usd'], signed=False)}")
+    token_width, roi_width, hold_width = (14, 8, 8)
+    lines.extend([f"| {_fit_display('Token / Date', token_width)} | {_fit_display('PNL', roi_width, align='right')} | {_fit_display('Copy', roi_width, align='right')} | {_fit_display('Hold', hold_width, align='right')} |", f"|{'-' * (token_width + 2)}|{'-' * (roi_width + 2)}|{'-' * (roi_width + 2)}|{'-' * (hold_width + 2)}|"])
     recent = list(metrics['recent_20_tokens'])
+    all_tokens = list(metrics.get('all_tokens') or metrics.get('all_markets') or [])
+    stored_tokens = {str(row.get('token_address') or row.get('condition_id') or '').lower(): row for row in all_tokens}
     for row in recent[:recent_limit]:
-        symbol = escape(str(row.get('title') or row.get('token_address') or '')[:10])
-        time_str = escape(str(row.get('time_str') or '')[:5])
-        label = f'{symbol} {time_str}'.strip()
+        token_address = str(row.get('token_address') or '').lower()
+        stored_token = stored_tokens.get(token_address, {})
+        symbol = _fit_display(str(row.get('title') or token_address), 8, truncate=True)
+        time_str = str(row.get('time_str') or '')[:5].replace('.', '-')
+        label = f'{symbol} {_fit_display(time_str, 5)}'
+        copy_invested = row.get('copy_invested', row.get('invested'))
+        target_invested = row.get('target_invested')
+        if target_invested is None and copy_invested is not None:
+            config = metrics.get('config') or {}
+            buy_penalty = float(config.get('buy_price_penalty') or 0)
+            copy_fee_rate = float(config.get('copy_fee_rate') or 0)
+            fixed_cost = float(config.get('copy_fixed_cost_usd') or 0)
+            inferred_cost = float(copy_invested) - fixed_cost * int(row.get('buy_count') or 0)
+            divisor = (1 + buy_penalty) * (1 + copy_fee_rate)
+            if inferred_cost > 0 and divisor > 0:
+                target_invested = inferred_cost / divisor
+        if target_invested is None:
+            target_invested = stored_token.get('invested')
+        is_closed = row.get('is_closed', stored_token.get('is_closed'))
+        holding_time = row.get('holding_time_seconds')
+        if holding_time is None and is_closed is True:
+            first_buy = float(stored_token.get('first_buy_time') or 0)
+            last_active = float(stored_token.get('last_active') or 0)
+            if first_buy and last_active >= first_buy:
+                holding_time = last_active - first_buy
+        target_roi = _roi_text(row.get('actual_pnl'), target_invested)
+        copy_roi = _roi_text(row.get('bt_copy_pnl'), copy_invested)
         icon = '✅' if float(row['bt_copy_pnl']) >= 0 else '❌'
-        lines.append(f"{label:<15} {_money(row['actual_pnl']):>10} {_money(row['bt_copy_pnl']):>10} {icon} ${float(row['invested']):,.0f}")
+        hold = _compact_holding_time(holding_time, is_closed=is_closed)
+        lines.append(f"| {escape(label)} | {_fit_display(target_roi, roi_width, align='right')} | {_fit_display(copy_roi, roi_width, align='right')} | {_fit_display(f'{hold} {icon}', hold_width, align='right')} |")
     lines.append('</pre>')
-    if show_older and len(recent) > recent_limit:
-        older = ' | '.join((f"{escape(str(row.get('title') or '')[:6])} {_money(row['bt_copy_pnl'])}" for row in recent[recent_limit:]))
-        lines.extend(['<pre>', _t(lang, 'older') + older, '</pre>'])
     daily = list(metrics['daily_stats'])[:daily_limit]
-    lines.extend([f"<b>📅 {escape(_t(lang, 'daily'))}</b>", '<pre>', _t(lang, 'daily_table'), '---------------------------------------'])
+    date_width, trades_width, volume_width, pnl_width = (5, 4, 7, 9)
+    lines.extend([f"<b>📅 {escape(_t(lang, 'daily'))}</b>", '<pre>', f"| {_fit_display('Date', date_width)} | {_fit_display('Tx', trades_width, align='right')} | {_fit_display('Volume', volume_width, align='right')} | {_fit_display('PNL', pnl_width, align='right')} | {_fit_display('Copy', pnl_width, align='right')} |", f"|{'-' * (date_width + 2)}|{'-' * (trades_width + 2)}|{'-' * (volume_width + 2)}|{'-' * (pnl_width + 2)}|{'-' * (pnl_width + 2)}|"])
     for row in daily:
         volume = float(row['volume'])
-        volume_text = f'${volume / 1000:.1f}k' if volume >= 1000 else f'${volume:.0f}'
-        lines.append(f"{row['date'][5:]} {int(row['trades']):>6} {volume_text:>7} {_money(row['actual_pnl']):>9} {_money(row['bt_copy_pnl']):>9}")
+        volume_text = _compact_money(volume, signed=False, decimals=0)
+        lines.append(f"| {_fit_display(row['date'][5:], date_width)} | {_fit_display(int(row['trades']), trades_width, align='right')} | {_fit_display(volume_text, volume_width, align='right')} | {_fit_display(_compact_money(row['actual_pnl']), pnl_width, align='right')} | {_fit_display(_compact_money(row['bt_copy_pnl']), pnl_width, align='right')} |")
     lines.append('</pre>')
     if result.data_quality.get('starting_inventory_unknown'):
         lines.append(f"⚠️ {escape(_t(lang, 'warning'))}")
@@ -1401,9 +1488,9 @@ def render_telegram_report(result: BacktestResult | None=None, *, wallet_address
         assert result is not None
         metrics = build_legacy_metrics(result, wallet_address=wallet_address, profile=profile)
     resolved_referral_url = referral_url or build_copy_trade_url(wallet_address)
-    layouts = ((7, 14, True), (7, 7, False), (5, 5, False), (3, 3, False), (0, 0, False))
-    for recent_limit, daily_limit, show_older in layouts:
-        report = _build_report(context, metrics, wallet_address=wallet_address, lang=lang, profile=profile, referral_url=resolved_referral_url, recent_limit=recent_limit, daily_limit=daily_limit, show_older=show_older)
+    layouts = ((20, 14), (14, 10), (10, 7), (7, 5), (3, 3), (0, 0))
+    for recent_limit, daily_limit in layouts:
+        report = _build_report(context, metrics, wallet_address=wallet_address, lang=lang, profile=profile, referral_url=resolved_referral_url, recent_limit=recent_limit, daily_limit=daily_limit)
         if len(report) <= max_length:
             return report
     raise ValueError('Telegram report summary exceeds the configured text limit')
